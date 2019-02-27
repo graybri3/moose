@@ -1,4 +1,12 @@
 #pylint: disable=missing-docstring
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
 import re
 import uuid
 import logging
@@ -12,9 +20,9 @@ from pylatexenc.latex2text import LatexNodes2Text
 
 import MooseDocs
 from MooseDocs.common import exceptions
-from MooseDocs.base import components
-from MooseDocs.tree import tokens, html
-from MooseDocs.extensions import command
+from MooseDocs.base import components, LatexRenderer
+from MooseDocs.tree import tokens, html, latex
+from MooseDocs.extensions import core, command
 
 LOG = logging.getLogger('MooseDocs.extensions.bibtex')
 
@@ -30,19 +38,28 @@ class BibtexExtension(command.CommandExtension):
     def defaultConfig():
         config = command.CommandExtension.defaultConfig()
         config['duplicate_warning'] = (True, "Show a warning when duplicate entries detected.")
+        config['duplicates'] = (list(), "A list of duplicates that are allowed.")
         return config
 
     def __init__(self, *args, **kwargs):
         command.CommandExtension.__init__(self, *args, **kwargs)
 
-        self.__database = BibliographyData()
+        self.__database = None
         self.__citations = set()
 
-    def init(self, translator):
-        command.CommandExtension.init(self, translator)
+    def initMetaData(self, page, meta):
+        meta.initData('citations', set())
+
+    def addCitations(self, *args):
+        self.__citations.update(args)
+
+    def preExecute(self, content):
+
+        duplicates = self.get('duplicates', list())
+        self.__database = BibliographyData()
 
         bib_files = []
-        for node in anytree.PreOrderIter(self.translator.root):
+        for node in content:
             if node.source.endswith('.bib'):
                 bib_files.append(node.source)
 
@@ -57,44 +74,69 @@ class BibtexExtension(command.CommandExtension):
             #      databaseadd_entries-method-not-considering
             warn = self.get('duplicate_warning')
             for key in db.entries:
-                if key in self.__database.entries:
+                duplicate_key = key in self.__database.entries
+                duplicate_key_allowed = key in duplicates
+                if duplicate_key and (not duplicate_key_allowed):
                     if warn:
                         msg = "The BibTeX entry '%s' defined in %s already exists."
                         LOG.warning(msg, key, bfile)
-                else:
+                elif not duplicate_key:
                     self.__database.add_entry(key, db.entries[key])
+
+    def postTokenize(self, ast, page, meta, reader):
+        if self.__citations:
+            meta.getData('citations').update(self.__citations)
+            self.__citations.clear()
+
+            has_bib = False
+            for node in anytree.PreOrderIter(ast):
+                if node.name == 'BibtexBibliography':
+                    has_bib = True
+                    break
+
+            if not has_bib:
+                BibtexBibliography(ast)
 
     @property
     def database(self):
         return self.__database
 
     def extend(self, reader, renderer):
-        self.requires(command)
+        self.requires(core, command)
 
-        self.addCommand(BibtexCommand())
+        self.addCommand(reader, BibtexCommand())
+        self.addCommand(reader, BibtexReferenceComponent())
+        reader.addInline(BibtexReferenceComponentDeprecated(), location='>FormatInline')
 
-        reader.addInline(BibtexReferenceComponent(), location='>Format')
+        renderer.add('BibtexCite', RenderBibtexCite())
+        renderer.add('BibtexBibliography', RenderBibtexBibliography())
 
-        renderer.add(BibtexCite, RenderBibtexCite())
-        renderer.add(BibtexBibliography, RenderBibtexBibliography())
+        if isinstance(renderer, LatexRenderer):
+            renderer.addPackage('natbib', 'round')
 
-class BibtexCite(tokens.Token):
-    PROPERTIES = [tokens.Property('keys', ptype=list, required=True),
-                  tokens.Property('cite', ptype=unicode, default=u'cite')]
+BibtexCite = tokens.newToken('BibtexCite', keys=[])
+BibtexBibliography = tokens.newToken('BibtexBibliography', bib_style=u'')
+class BibtexReferenceComponent(command.CommandComponent):
+    COMMAND = ('cite', 'citet', 'citep', 'nocite')
+    SUBCOMMAND = None
 
-class BibtexBibliography(tokens.Token):
-    PROPERTIES = [tokens.Property('style', required=True, ptype=unicode)]
+    def createToken(self, parent, info, page):
+        keys = [key.strip() for key in info['inline'].split(',')]
+        BibtexCite(parent, keys=keys, cite=info['command'])
+        self.extension.addCitations(*keys)
+        return parent
 
-class BibtexReferenceComponent(components.TokenComponent):
-    RE = re.compile(r'\['                          # open
+class BibtexReferenceComponentDeprecated(components.TokenComponent):
+    RE = re.compile(r'\['                                 # open
                     r'(?P<cite>cite|citet|citep|nocite):' # cite prefix
-                    r'(?P<keys>.*?)'               # list of keys
-                    r'\]',                         # closing ]
+                    r'(?P<keys>.*?)'                      # list of keys
+                    r'\]',                                # closing ]
                     flags=re.UNICODE)
 
-    def createToken(self, info, parent):
+    def createToken(self, parent, info, page):
         keys = [key.strip() for key in info['keys'].split(',')]
         BibtexCite(parent, keys=keys, cite=info['cite'])
+        self.extension.addCitations(*keys)
         return parent
 
 class BibtexCommand(command.CommandComponent):
@@ -109,30 +151,33 @@ class BibtexCommand(command.CommandComponent):
         config['title-level'] = (2, "The heading level for the section title for the references.")
         return config
 
-    def createToken(self, token, parent): #pylint: disable=unused-argument
+    def createToken(self, parent, token, page): #pylint: disable=unused-argument
         if self.settings['title']:
-            h = tokens.Heading(parent, level=self.settings['title-level'])
-            self.translator.reader.parse(h, self.settings['title'], MooseDocs.INLINE)
-        BibtexBibliography(parent, style=self.settings['style'])
+            h = core.Heading(parent, level=self.settings['title-level'])
+            self.reader.tokenize(h, self.settings['title'], page, MooseDocs.INLINE)
+        BibtexBibliography(parent, bib_style=self.settings['style'])
         return parent
 
 class RenderBibtexCite(components.RenderComponent):
 
-    def createHTML(self, token, parent):
+    def createHTML(self, parent, token, page):
 
-        if token.cite == 'nocite':
+        cite = token['cite']
+        if cite == 'nocite':
             return parent
 
-        citep = token.cite == 'citep'
+        citep = cite == 'citep'
         if citep:
             html.String(parent, content=u'(')
 
-        num_keys = len(token.keys)
-        for i, key in enumerate(token.keys):
+        num_keys = len(token['keys'])
+        for i, key in enumerate(token['keys']):
 
             if key not in self.extension.database.entries:
-                msg = 'Unknown BibTeX key: {}'
-                raise exceptions.RenderException(msg, key)
+                LOG.error('Unknown BibTeX key: %s', key)
+                html.Tag(parent, 'span', string=key, style='color:red;')
+                continue
+
 
             entry = self.extension.database.entries[key]
             author_found = True
@@ -150,7 +195,7 @@ class RenderBibtexCite(components.RenderComponent):
 
             if not author_found:
                 msg = 'No author, institution, or organization for {}'
-                raise exceptions.RenderException(msg, key)
+                raise exceptions.MooseDocsException(msg, key)
 
             a = entry.persons['author']
             n = len(a)
@@ -184,23 +229,23 @@ class RenderBibtexCite(components.RenderComponent):
 
         return parent
 
-    def createMaterialize(self, token, parent):
-        self.createHTML(token, parent)
+    def createMaterialize(self, parent, token, page):
+        self.createHTML(parent, token, page)
+
+    def createLatex(self, parent, token, page):
+        latex.Command(parent, token['cite'], string=u','.join(token['keys']), escape=False)
+        return parent
 
 class RenderBibtexBibliography(components.RenderComponent):
-    def createHTML(self, token, parent):
+    def createHTML(self, parent, token, page):
 
         try:
-            style = find_plugin('pybtex.style.formatting', token.style)
+            style = find_plugin('pybtex.style.formatting', token['bib_style'])
         except PluginNotFound:
             msg = 'Unknown bibliography style "{}".'
-            raise exceptions.RenderException(msg, token.style)
+            raise exceptions.MooseDocsException(msg, token['bib_style'])
 
-        citations = list()
-        for tok in anytree.PreOrderIter(token.root):
-            if isinstance(tok, BibtexCite):
-                citations.extend(tok.keys)
-
+        citations = list(self.translator.getMetaData(page, 'citations'))
         formatted_bibliography = style().format_bibliography(self.extension.database, citations)
         html_backend = find_plugin('pybtex.backends', 'html')
 
@@ -213,9 +258,8 @@ class RenderBibtexBibliography(components.RenderComponent):
 
         return ol
 
-    def createMaterialize(self, token, parent):
-        ol = self.createHTML(token, parent)
-
+    def createMaterialize(self, parent, token, page):
+        ol = self.createHTML(parent, token, page)
         for child in ol.children:
             key = child['id']
             db = BibliographyData()
@@ -233,3 +277,8 @@ class RenderBibtexBibliography(components.RenderComponent):
             content = html.Tag(modal, 'div', class_='modal-content')
             pre = html.Tag(content, 'pre', style="line-height:1.25;")
             html.Tag(pre, 'code', class_='language-latex', string=btex)
+
+        return ol
+
+    def createLatex(self, parent, token, page):
+        pass

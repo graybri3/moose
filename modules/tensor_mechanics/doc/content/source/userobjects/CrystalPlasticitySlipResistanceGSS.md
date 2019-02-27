@@ -1,14 +1,9 @@
-<!-- MOOSE Documentation Stub: Remove this when content is added. -->
-
 # CrystalPlasticitySlipResistanceGSS
 
-!alert construction title=Undocumented Class
-The CrystalPlasticitySlipResistanceGSS has not been documented, if you would like to contribute to MOOSE by
-writing documentation, please see [/generate.md]. The content contained on this page explains
-the typical documentation associated with a MooseObject; however, what is contained is ultimately
-determined by what is necessary to make the documentation clear for users.
+## Description
 
-!syntax description /UserObjects/CrystalPlasticitySlipResistanceGSS
+`CrystalPlasticitySlipResistanceGSS` derives from `CrystalPlasticitySlipResistance` which calculates slip resistance in [crystal plasticity system](FiniteStrainUObasedCP.md). The slip resistance $s=s(y,\cdots)$ can be a function of state variables $y$.
+
 
 !syntax parameters /UserObjects/CrystalPlasticitySlipResistanceGSS
 

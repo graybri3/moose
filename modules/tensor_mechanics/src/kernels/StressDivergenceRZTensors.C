@@ -20,12 +20,12 @@ validParams<StressDivergenceRZTensors>()
 {
   InputParameters params = validParams<StressDivergenceTensors>();
   params.addClassDescription(
-      "Calculate stress divergence for an axisymmetric problem in cylinderical coordinates.");
-  params.addRequiredParam<unsigned int>(
+      "Calculate stress divergence for an axisymmetric problem in cylindrical coordinates.");
+  params.addRequiredRangeCheckedParam<unsigned int>(
       "component",
+      "component < 2",
       "An integer corresponding to the direction the variable this kernel acts in. (0 "
-      "for x, 1 for y, 2 for z; note in this kernel disp_x refers to the radial "
-      "displacement and disp_y refers to the axial displacement.)");
+      "refers to the radial and 1 to the axial displacement.)");
   params.set<bool>("use_displaced_mesh") = true;
   return params;
 }
@@ -41,6 +41,9 @@ StressDivergenceRZTensors::initialSetup()
   if (getBlockCoordSystem() != Moose::COORD_RZ)
     mooseError("The coordinate system in the Problem block must be set to RZ for axisymmetric "
                "geometries.");
+
+  if (getBlockCoordSystem() == Moose::COORD_RZ && _fe_problem.getAxisymmetricRadialCoord() != 0)
+    mooseError("rz_coord_axis=Y is the only supported option for StressDivergenceRZTensors");
 }
 
 Real

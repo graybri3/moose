@@ -168,11 +168,11 @@ validParams<FEProblemBase>()
                         true,
                         "Set to false to disable material->subdomain coverage check");
   params.addParam<bool>("parallel_barrier_messaging",
-                        true,
+                        false,
                         "Displays messaging from parallel "
                         "barrier notifications when executing "
                         "or transferring to/from Multiapps "
-                        "(default: true)");
+                        "(default: false)");
 
   params.addParam<FileNameNoExtension>("restart_file_base",
                                        "File base name used for restart (e.g. "
@@ -256,7 +256,7 @@ FEProblemBase::FEProblemBase(const InputParameters & parameters)
     _current_execute_on_flag(EXEC_NONE),
     _control_warehouse(_app.getExecuteOnEnum(), /*threaded=*/false),
     _line_search(nullptr),
-    _using_ad(false),
+    _using_ad_mat_props(false),
     _error_on_jacobian_nonzero_reallocation(
         getParam<bool>("error_on_jacobian_nonzero_reallocation")),
     _ignore_zeros_in_jacobian(getParam<bool>("ignore_zeros_in_jacobian")),
@@ -312,8 +312,12 @@ FEProblemBase::FEProblemBase(const InputParameters & parameters)
     _check_nonlinear_convergence_timer(registerTimedSection("checkNonlinearConvergence", 5)),
     _check_linear_convergence_timer(registerTimedSection("checkLinearConvergence", 5)),
     _update_geometric_search_timer(registerTimedSection("updateGeometricSearch", 3)),
-    _exec_multi_apps_timer(registerTimedSection("execMultiApps", 3)),
-    _backup_multi_apps_timer(registerTimedSection("backupMultiApps", 5))
+    _exec_multi_apps_timer(registerTimedSection("execMultiApps", 1)),
+    _backup_multi_apps_timer(registerTimedSection("backupMultiApps", 5)),
+    _u_dot_requested(false),
+    _u_dotdot_requested(false),
+    _u_dot_old_requested(false),
+    _u_dotdot_old_requested(false)
 {
 
   _time = 0.0;
@@ -331,6 +335,7 @@ FEProblemBase::FEProblemBase(const InputParameters & parameters)
   _grad_zero.resize(n_threads);
   _ad_grad_zero.resize(n_threads);
   _second_zero.resize(n_threads);
+  _ad_second_zero.resize(n_threads);
   _second_phi_zero.resize(n_threads);
   _point_zero.resize(n_threads);
   _vector_zero.resize(n_threads);
@@ -363,23 +368,7 @@ FEProblemBase::FEProblemBase(const InputParameters & parameters)
   if (isParamValid("restart_file_base"))
   {
     std::string restart_file_base = getParam<FileNameNoExtension>("restart_file_base");
-
-    std::size_t slash_pos = restart_file_base.find_last_of("/");
-    std::string path = restart_file_base.substr(0, slash_pos);
-    std::string file = restart_file_base.substr(slash_pos + 1);
-
-    // If the user specified LATEST as the file in their directory path, find the file with the
-    // latest timestep and the largest serial number.
-    if (file == "LATEST")
-    {
-      std::list<std::string> dir_list(1, path);
-      std::list<std::string> files = MooseUtils::getFilesInDirs(dir_list);
-      restart_file_base = MooseUtils::getLatestAppCheckpointFileBase(files);
-
-      if (restart_file_base == "")
-        mooseError("Unable to find suitable restart file");
-    }
-
+    restart_file_base = MooseUtils::convertLatestCheckpoint(restart_file_base);
     _console << "\nUsing " << restart_file_base << " for restart.\n\n";
     setRestartFile(restart_file_base);
   }
@@ -471,6 +460,7 @@ FEProblemBase::~FEProblemBase()
     _vector_curl_zero[i].release();
     _ad_zero[i].release();
     _ad_grad_zero[i].release();
+    _ad_second_zero[i].release();
   }
 }
 
@@ -581,7 +571,7 @@ FEProblemBase::initialSetup()
   // set state flag indicating that we are in or beyond initialSetup.
   // This can be used to throw errors in methods that _must_ be called at construction time.
   _started_initial_setup = true;
-
+  setCurrentExecuteOnFlag(EXEC_INITIAL);
   addExtraVectors();
 
   // Perform output related setups
@@ -694,7 +684,8 @@ FEProblemBase::initialSetup()
     for (THREAD_ID tid = 0; tid < n_threads; tid++)
     {
       // Sort the Material objects, these will be actually computed by MOOSE in reinit methods.
-      _materials.sort(tid);
+      _residual_materials.sort(tid);
+      _jacobian_materials.sort(tid);
 
       // Call initialSetup on both Material and Material objects
       _all_materials.initialSetup(tid);
@@ -809,11 +800,11 @@ FEProblemBase::initialSetup()
   // restored
 
   // Call initialSetup on the MultiApps
-  if (_multi_apps.hasActiveObjects())
+  if (_multi_apps.hasObjects())
   {
-    _console << COLOR_CYAN << "Initializing MultiApps" << COLOR_DEFAULT << std::endl;
+    _console << COLOR_CYAN << "Initializing All MultiApps" << COLOR_DEFAULT << std::endl;
     _multi_apps.initialSetup();
-    _console << COLOR_CYAN << "Finished Initializing MultiApps" << COLOR_DEFAULT << std::endl;
+    _console << COLOR_CYAN << "Finished Initializing All MultiApps" << COLOR_DEFAULT << std::endl;
   }
 
   // Call initialSetup on the transfers
@@ -836,6 +827,11 @@ FEProblemBase::initialSetup()
       reinitScalars(tid);
 
     execute(EXEC_INITIAL);
+
+    // The FEProblemBase::execute method doesn't call all the systems on EXEC_INITIAL, but it does
+    // set/unset the current flag. Therefore, this resets the current flag to EXEC_INITIAL so that
+    // subsequent calls (e.g., executeControls) have the proper flag.
+    setCurrentExecuteOnFlag(EXEC_INITIAL);
   }
 
   // Here we will initialize the stateful properties once more since they may have been updated
@@ -887,6 +883,7 @@ FEProblemBase::initialSetup()
   }
 
   _app.checkRegistryLabels();
+  setCurrentExecuteOnFlag(EXEC_NONE);
 }
 
 void
@@ -1857,6 +1854,9 @@ FEProblemBase::addKernel(const std::string & kernel_name,
   {
     parameters.set<SubProblem *>("_subproblem") = _displaced_problem.get();
     parameters.set<SystemBase *>("_sys") = &_displaced_problem->nlSys();
+    const auto & disp_names = _displaced_problem->getDisplacementVarNames();
+    parameters.set<std::vector<VariableName>>("displacements") =
+        std::vector<VariableName>(disp_names.begin(), disp_names.end());
     _reinit_displaced_elem = true;
   }
   else
@@ -1945,6 +1945,9 @@ FEProblemBase::addBoundaryCondition(const std::string & bc_name,
   {
     parameters.set<SubProblem *>("_subproblem") = _displaced_problem.get();
     parameters.set<SystemBase *>("_sys") = &_displaced_problem->nlSys();
+    const auto & disp_names = _displaced_problem->getDisplacementVarNames();
+    parameters.set<std::vector<VariableName>>("displacements") =
+        std::vector<VariableName>(disp_names.begin(), disp_names.end());
     _reinit_displaced_face = true;
   }
   else
@@ -2348,7 +2351,7 @@ FEProblemBase::addMaterial(const std::string & mat_name,
                            const std::string & name,
                            InputParameters parameters)
 {
-  addMaterialHelper(_materials, mat_name, name, parameters);
+  addMaterialHelper({&_residual_materials, &_jacobian_materials}, mat_name, name, parameters);
 }
 
 void
@@ -2356,7 +2359,7 @@ FEProblemBase::addADResidualMaterial(const std::string & mat_name,
                                      const std::string & name,
                                      InputParameters parameters)
 {
-  addMaterialHelper(_residual_materials, mat_name, name, parameters);
+  addMaterialHelper({&_residual_materials}, mat_name, name, parameters);
 }
 
 void
@@ -2364,11 +2367,11 @@ FEProblemBase::addADJacobianMaterial(const std::string & mat_name,
                                      const std::string & name,
                                      InputParameters parameters)
 {
-  addMaterialHelper(_jacobian_materials, mat_name, name, parameters);
+  addMaterialHelper({&_jacobian_materials}, mat_name, name, parameters);
 }
 
 void
-FEProblemBase::addMaterialHelper(MaterialWarehouse & warehouse,
+FEProblemBase::addMaterialHelper(std::vector<MaterialWarehouse *> warehouses,
                                  const std::string & mat_name,
                                  const std::string & name,
                                  InputParameters parameters)
@@ -2406,7 +2409,8 @@ FEProblemBase::addMaterialHelper(MaterialWarehouse & warehouse,
       if (discrete)
         _discrete_materials.addObject(material, tid);
       else
-        warehouse.addObject(material, tid);
+        for (auto && warehouse : warehouses)
+          warehouse->addObject(material, tid);
     }
 
     // Non-boundary restricted require face and neighbor objects
@@ -2441,7 +2445,8 @@ FEProblemBase::addMaterialHelper(MaterialWarehouse & warehouse,
       if (discrete)
         _discrete_materials.addObjects(material, neighbor_material, face_material, tid);
       else
-        warehouse.addObjects(material, neighbor_material, face_material, tid);
+        for (auto && warehouse : warehouses)
+          warehouse->addObjects(material, neighbor_material, face_material, tid);
 
       // link parameters of face and neighbor materials
       MooseObjectParameterName name(MooseObjectName("Material", material->name()), "*");
@@ -2470,8 +2475,6 @@ FEProblemBase::prepareMaterials(SubdomainID blk_id, THREAD_ID tid)
   const std::set<BoundaryID> & ids = _mesh.getSubdomainBoundaryIds(blk_id);
   for (const auto & id : ids)
   {
-    _materials.updateBoundaryVariableDependency(id, needed_moose_vars, tid);
-    _materials.updateBoundaryMatPropDependency(id, needed_mat_props, tid);
     if (_currently_computing_jacobian)
     {
       _jacobian_materials.updateBoundaryVariableDependency(id, needed_moose_vars, tid);
@@ -2514,9 +2517,6 @@ FEProblemBase::reinitMaterials(SubdomainID blk_id, THREAD_ID tid, bool swap_stat
     if (_discrete_materials.hasActiveBlockObjects(blk_id, tid))
       _material_data[tid]->reset(_discrete_materials.getActiveBlockObjects(blk_id, tid));
 
-    if (_materials.hasActiveBlockObjects(blk_id, tid))
-      _material_data[tid]->reinit(_materials.getActiveBlockObjects(blk_id, tid));
-
     if (_jacobian_materials.hasActiveBlockObjects(blk_id, tid) && _currently_computing_jacobian)
       _material_data[tid]->reinit(_jacobian_materials.getActiveBlockObjects(blk_id, tid));
 
@@ -2542,10 +2542,6 @@ FEProblemBase::reinitMaterialsFace(SubdomainID blk_id, THREAD_ID tid, bool swap_
     if (_discrete_materials[Moose::FACE_MATERIAL_DATA].hasActiveBlockObjects(blk_id, tid))
       _bnd_material_data[tid]->reset(
           _discrete_materials[Moose::FACE_MATERIAL_DATA].getActiveBlockObjects(blk_id, tid));
-
-    if (_materials[Moose::FACE_MATERIAL_DATA].hasActiveBlockObjects(blk_id, tid))
-      _bnd_material_data[tid]->reinit(
-          _materials[Moose::FACE_MATERIAL_DATA].getActiveBlockObjects(blk_id, tid));
 
     if (_jacobian_materials[Moose::FACE_MATERIAL_DATA].hasActiveBlockObjects(blk_id, tid) &&
         _currently_computing_jacobian)
@@ -2578,10 +2574,6 @@ FEProblemBase::reinitMaterialsNeighbor(SubdomainID blk_id, THREAD_ID tid, bool s
       _neighbor_material_data[tid]->reset(
           _discrete_materials[Moose::NEIGHBOR_MATERIAL_DATA].getActiveBlockObjects(blk_id, tid));
 
-    if (_materials[Moose::NEIGHBOR_MATERIAL_DATA].hasActiveBlockObjects(blk_id, tid))
-      _neighbor_material_data[tid]->reinit(
-          _materials[Moose::NEIGHBOR_MATERIAL_DATA].getActiveBlockObjects(blk_id, tid));
-
     if (_jacobian_materials[Moose::NEIGHBOR_MATERIAL_DATA].hasActiveBlockObjects(blk_id, tid) &&
         _currently_computing_jacobian)
       _neighbor_material_data[tid]->reinit(
@@ -2610,9 +2602,6 @@ FEProblemBase::reinitMaterialsBoundary(BoundaryID boundary_id, THREAD_ID tid, bo
     if (_discrete_materials.hasActiveBoundaryObjects(boundary_id, tid))
       _bnd_material_data[tid]->reset(
           _discrete_materials.getActiveBoundaryObjects(boundary_id, tid));
-
-    if (_materials.hasActiveBoundaryObjects(boundary_id, tid))
-      _bnd_material_data[tid]->reinit(_materials.getActiveBoundaryObjects(boundary_id, tid));
 
     if (_jacobian_materials.hasActiveBoundaryObjects(boundary_id, tid) &&
         _currently_computing_jacobian)
@@ -3033,7 +3022,11 @@ FEProblemBase::execute(const ExecFlagType & exec_type)
   // Set the current flag
   setCurrentExecuteOnFlag(exec_type);
   if (exec_type == EXEC_NONLINEAR)
+  {
     _currently_computing_jacobian = true;
+    if (_displaced_problem)
+      _displaced_problem->setCurrentlyComputingJacobian(true);
+  }
 
   // Samplers
   if (exec_type != EXEC_INITIAL)
@@ -3055,6 +3048,8 @@ FEProblemBase::execute(const ExecFlagType & exec_type)
   // Return the current flag to None
   setCurrentExecuteOnFlag(EXEC_NONE);
   _currently_computing_jacobian = false;
+  if (_displaced_problem)
+    _displaced_problem->setCurrentlyComputingJacobian(false);
 }
 
 void
@@ -3299,7 +3294,6 @@ FEProblemBase::updateActiveObjects()
     _internal_side_indicators.updateActive(tid);
     _markers.updateActive(tid);
     _all_materials.updateActive(tid);
-    _materials.updateActive(tid);
     _residual_materials.updateActive(tid);
     _jacobian_materials.updateActive(tid);
     _discrete_materials.updateActive(tid);
@@ -3480,6 +3474,12 @@ FEProblemBase::addMultiApp(const std::string & multi_app_name,
 }
 
 bool
+FEProblemBase::hasMultiApps(ExecFlagType type) const
+{
+  return _multi_apps[type].hasActiveObjects();
+}
+
+bool
 FEProblemBase::hasMultiApp(const std::string & multi_app_name) const
 {
   return _multi_apps.hasActiveObject(multi_app_name);
@@ -3488,7 +3488,7 @@ FEProblemBase::hasMultiApp(const std::string & multi_app_name) const
 std::shared_ptr<MultiApp>
 FEProblemBase::getMultiApp(const std::string & multi_app_name) const
 {
-  return _multi_apps.getActiveObject(multi_app_name);
+  return _multi_apps.getObject(multi_app_name);
 }
 
 void
@@ -3510,7 +3510,6 @@ FEProblemBase::execMultiAppTransfers(ExecFlagType type, MultiAppTransfer::DIRECT
     for (const auto & transfer : transfers)
       transfer->execute();
 
-    _console << "Waiting For Transfers To Finish" << '\n';
     MooseUtils::parallelBarrierNotify(_communicator, _parallel_barrier_messaging);
 
     _console << COLOR_CYAN << "Transfers on " << Moose::stringify(type) << " Are Finished\n"
@@ -3555,12 +3554,16 @@ FEProblemBase::execMultiApps(ExecFlagType type, bool auto_advance)
     bool success = true;
 
     for (const auto & multi_app : multi_apps)
+    {
       success = multi_app->solveStep(_dt, _time, auto_advance);
+      // no need to finish executing the subapps if one fails
+      if (!success)
+        break;
+    }
 
-    _console << "Waiting For Other Processors To Finish" << '\n';
     MooseUtils::parallelBarrierNotify(_communicator, _parallel_barrier_messaging);
 
-    _communicator.max(success);
+    _communicator.min(success);
 
     if (!success)
       return false;
@@ -3577,14 +3580,21 @@ FEProblemBase::execMultiApps(ExecFlagType type, bool auto_advance)
 }
 
 void
+FEProblemBase::finalizeMultiApps()
+{
+  const auto & multi_apps = _multi_apps.getActiveObjects();
+
+  for (const auto & multi_app : multi_apps)
+    multi_app->finalize();
+}
+
+void
 FEProblemBase::postExecute()
 {
   const auto & multi_apps = _multi_apps.getActiveObjects();
 
   for (const auto & multi_app : multi_apps)
-    // If the app has been solved, then postExecute() will have been called already too
-    if (!multi_app->isSolved())
-      multi_app->postExecute();
+    multi_app->postExecute();
 }
 
 void
@@ -3594,7 +3604,7 @@ FEProblemBase::incrementMultiAppTStep(ExecFlagType type)
 
   if (multi_apps.size())
     for (const auto & multi_app : multi_apps)
-      multi_app->incrementTStep();
+      multi_app->incrementTStep(_time);
 }
 
 void
@@ -3604,15 +3614,16 @@ FEProblemBase::finishMultiAppStep(ExecFlagType type)
 
   if (multi_apps.size())
   {
-    _console << COLOR_CYAN << "\nAdvancing MultiApps" << COLOR_DEFAULT << std::endl;
+    _console << COLOR_CYAN << "\nAdvancing MultiApps on " << type.name() << COLOR_DEFAULT
+             << std::endl;
 
     for (const auto & multi_app : multi_apps)
       multi_app->finishStep();
 
-    _console << "Waiting For Other Processors To Finish" << std::endl;
     MooseUtils::parallelBarrierNotify(_communicator, _parallel_barrier_messaging);
 
-    _console << COLOR_CYAN << "Finished Advancing MultiApps\n" << COLOR_DEFAULT << std::endl;
+    _console << COLOR_CYAN << "Finished Advancing MultiApps on " << type.name() << "\n"
+             << COLOR_DEFAULT << std::endl;
   }
 }
 
@@ -3625,15 +3636,16 @@ FEProblemBase::backupMultiApps(ExecFlagType type)
   {
     TIME_SECTION(_backup_multi_apps_timer);
 
-    _console << COLOR_CYAN << "\nBacking Up MultiApps" << COLOR_DEFAULT << std::endl;
+    _console << COLOR_CYAN << "\nBacking Up MultiApps on " << type.name() << COLOR_DEFAULT
+             << std::endl;
 
     for (const auto & multi_app : multi_apps)
       multi_app->backup();
 
-    _console << "Waiting For Other Processors To Finish" << std::endl;
     MooseUtils::parallelBarrierNotify(_communicator, _parallel_barrier_messaging);
 
-    _console << COLOR_CYAN << "Finished Backing Up MultiApps\n" << COLOR_DEFAULT << std::endl;
+    _console << COLOR_CYAN << "Finished Backing Up MultiApps on " << type.name() << "\n"
+             << COLOR_DEFAULT << std::endl;
   }
 }
 
@@ -3645,19 +3657,20 @@ FEProblemBase::restoreMultiApps(ExecFlagType type, bool force)
   if (multi_apps.size())
   {
     if (force)
-      _console << COLOR_CYAN << "\nRestoring Multiapps because of solve failure!" << COLOR_DEFAULT
-               << std::endl;
+      _console << COLOR_CYAN << "\nRestoring Multiapps on " << type.name()
+               << " because of solve failure!" << COLOR_DEFAULT << std::endl;
     else
-      _console << COLOR_CYAN << "\nRestoring MultiApps" << COLOR_DEFAULT << std::endl;
+      _console << COLOR_CYAN << "\nRestoring MultiApps on " << type.name() << COLOR_DEFAULT
+               << std::endl;
 
     for (const auto & multi_app : multi_apps)
       if (force || multi_app->needsRestoration())
         multi_app->restore();
 
-    _console << "Waiting For Other Processors To Finish" << std::endl;
     MooseUtils::parallelBarrierNotify(_communicator, _parallel_barrier_messaging);
 
-    _console << COLOR_CYAN << "Finished Restoring MultiApps\n" << COLOR_DEFAULT << std::endl;
+    _console << COLOR_CYAN << "Finished Restoring MultiApps on " << type.name() << "\n"
+             << COLOR_DEFAULT << std::endl;
   }
 }
 
@@ -3813,6 +3826,42 @@ FEProblemBase::getSystem(const std::string & var_name)
 }
 
 void
+FEProblemBase::setActiveFEVariableCoupleableMatrixTags(std::set<TagID> & mtags, THREAD_ID tid)
+{
+  SubProblem::setActiveFEVariableCoupleableMatrixTags(mtags, tid);
+
+  if (_displaced_problem)
+    _displaced_problem->setActiveFEVariableCoupleableMatrixTags(mtags, tid);
+}
+
+void
+FEProblemBase::setActiveFEVariableCoupleableVectorTags(std::set<TagID> & vtags, THREAD_ID tid)
+{
+  SubProblem::setActiveFEVariableCoupleableVectorTags(vtags, tid);
+
+  if (_displaced_problem)
+    _displaced_problem->setActiveFEVariableCoupleableVectorTags(vtags, tid);
+}
+
+void
+FEProblemBase::setActiveScalarVariableCoupleableMatrixTags(std::set<TagID> & mtags, THREAD_ID tid)
+{
+  SubProblem::setActiveScalarVariableCoupleableMatrixTags(mtags, tid);
+
+  if (_displaced_problem)
+    _displaced_problem->setActiveScalarVariableCoupleableMatrixTags(mtags, tid);
+}
+
+void
+FEProblemBase::setActiveScalarVariableCoupleableVectorTags(std::set<TagID> & vtags, THREAD_ID tid)
+{
+  SubProblem::setActiveScalarVariableCoupleableVectorTags(vtags, tid);
+
+  if (_displaced_problem)
+    _displaced_problem->setActiveScalarVariableCoupleableVectorTags(vtags, tid);
+}
+
+void
 FEProblemBase::setActiveElementalMooseVariables(const std::set<MooseVariableFEBase *> & moose_vars,
                                                 THREAD_ID tid)
 {
@@ -3829,6 +3878,42 @@ FEProblemBase::clearActiveElementalMooseVariables(THREAD_ID tid)
 
   if (_displaced_problem)
     _displaced_problem->clearActiveElementalMooseVariables(tid);
+}
+
+void
+FEProblemBase::clearActiveFEVariableCoupleableMatrixTags(THREAD_ID tid)
+{
+  SubProblem::clearActiveFEVariableCoupleableMatrixTags(tid);
+
+  if (_displaced_problem)
+    _displaced_problem->clearActiveFEVariableCoupleableMatrixTags(tid);
+}
+
+void
+FEProblemBase::clearActiveFEVariableCoupleableVectorTags(THREAD_ID tid)
+{
+  SubProblem::clearActiveFEVariableCoupleableVectorTags(tid);
+
+  if (_displaced_problem)
+    _displaced_problem->clearActiveFEVariableCoupleableVectorTags(tid);
+}
+
+void
+FEProblemBase::clearActiveScalarVariableCoupleableMatrixTags(THREAD_ID tid)
+{
+  SubProblem::clearActiveScalarVariableCoupleableMatrixTags(tid);
+
+  if (_displaced_problem)
+    _displaced_problem->clearActiveScalarVariableCoupleableMatrixTags(tid);
+}
+
+void
+FEProblemBase::clearActiveScalarVariableCoupleableVectorTags(THREAD_ID tid)
+{
+  SubProblem::clearActiveScalarVariableCoupleableVectorTags(tid);
+
+  if (_displaced_problem)
+    _displaced_problem->clearActiveScalarVariableCoupleableVectorTags(tid);
 }
 
 void
@@ -3895,8 +3980,9 @@ FEProblemBase::createQRules(QuadratureType type, Order order, Order volume_order
     _zero[tid].resize(max_qpts, 0);
     _ad_zero[tid].resize(max_qpts, 0);
     _grad_zero[tid].resize(max_qpts, RealGradient(0.));
-    _ad_grad_zero[tid].resize(max_qpts, ADRealGradient(0));
+    _ad_grad_zero[tid].resize(max_qpts, DualRealGradient(0));
     _second_zero[tid].resize(max_qpts, RealTensor(0.));
+    _ad_second_zero[tid].resize(max_qpts, DualRealTensorValue(0));
     _second_phi_zero[tid].resize(max_qpts,
                                  std::vector<RealTensor>(getMaxShapeFunctions(), RealTensor(0.)));
     _vector_zero[tid].resize(max_qpts, RealGradient(0.));
@@ -4197,13 +4283,13 @@ FEProblemBase::advanceState()
   _vpps_data.copyValuesBack();
 
   if (_material_props.hasStatefulProperties())
-    _material_props.shift();
+    _material_props.shift(*this);
 
   if (_bnd_material_props.hasStatefulProperties())
-    _bnd_material_props.shift();
+    _bnd_material_props.shift(*this);
 
   if (_neighbor_material_props.hasStatefulProperties())
-    _neighbor_material_props.shift();
+    _neighbor_material_props.shift(*this);
 }
 
 void
@@ -4289,6 +4375,11 @@ FEProblemBase::addTimeIntegrator(const std::string & type,
   _aux->addTimeIntegrator(type, name + ":aux", parameters);
   _nl->addTimeIntegrator(type, name, parameters);
   _has_time_integrator = true;
+
+  // add vectors to store u_dot, u_dotdot, udot_old and u_dotdot_old if requested by the time
+  // integrator
+  _aux->addDotVectors();
+  _nl->addDotVectors();
 }
 
 void
@@ -4439,11 +4530,17 @@ void
 FEProblemBase::computeTransientImplicitResidual(Real time,
                                                 const NumericVector<Number> & u,
                                                 const NumericVector<Number> & udot,
+                                                const NumericVector<Number> & udotdot,
                                                 NumericVector<Number> & residual)
 {
   TIME_SECTION(_compute_transient_implicit_residual_timer);
 
-  _nl->setSolutionUDot(udot);
+  if (uDotRequested())
+    _nl->setSolutionUDot(udot);
+
+  if (uDotDotRequested())
+    _nl->setSolutionUDotDot(udotdot);
+
   _time = time;
   computeResidual(u, residual);
 }
@@ -4514,7 +4611,11 @@ FEProblemBase::computeResidualTags(const std::set<TagID> & tags)
 
   _app.getOutputWarehouse().residualSetup();
 
+  _safe_access_tagged_vectors = false;
+
   _nl->computeResidualTags(tags);
+
+  _safe_access_tagged_vectors = true;
 }
 
 void
@@ -4589,6 +4690,8 @@ FEProblemBase::computeJacobianTags(const std::set<TagID> & tags)
 
     _current_execute_on_flag = EXEC_NONLINEAR;
     _currently_computing_jacobian = true;
+    if (_displaced_problem)
+      _displaced_problem->setCurrentlyComputingJacobian(true);
 
     execTransfers(EXEC_NONLINEAR);
     execMultiApps(EXEC_NONLINEAR);
@@ -4620,11 +4723,16 @@ FEProblemBase::computeJacobianTags(const std::set<TagID> & tags)
 
     _app.getOutputWarehouse().jacobianSetup();
 
+    _safe_access_tagged_matrices = false;
+
     _nl->computeJacobianTags(tags);
 
     _current_execute_on_flag = EXEC_NONE;
     _currently_computing_jacobian = false;
+    if (_displaced_problem)
+      _displaced_problem->setCurrentlyComputingJacobian(false);
     _has_jacobian = true;
+    _safe_access_tagged_matrices = true;
   }
 }
 
@@ -4632,15 +4740,21 @@ void
 FEProblemBase::computeTransientImplicitJacobian(Real time,
                                                 const NumericVector<Number> & u,
                                                 const NumericVector<Number> & udot,
-                                                Real shift,
+                                                const NumericVector<Number> & udotdot,
+                                                Real duDotDu_shift,
+                                                Real duDotDotDu_shift,
                                                 SparseMatrix<Number> & jacobian)
 {
   if (0)
   { // The current interface guarantees that the residual is called before Jacobian, thus udot has
     // already been set
-    _nl->setSolutionUDot(udot);
+    if (uDotDotRequested())
+      _nl->setSolutionUDotDot(udotdot);
+    if (uDotOldRequested())
+      _nl->setSolutionUDot(udot);
   }
-  _nl->duDotDu() = shift;
+  _nl->duDotDu() = duDotDu_shift;
+  _nl->duDotDotDu() = duDotDotDu_shift;
   _time = time;
   computeJacobian(u, jacobian);
 }
@@ -5548,7 +5662,7 @@ FEProblemBase::checkNonlinearConvergence(std::string & msg,
   TIME_SECTION(_check_nonlinear_convergence_timer);
 
   NonlinearSystemBase & system = getNonlinearSystemBase();
-  MooseNonlinearConvergenceReason reason = MOOSE_NONLINEAR_ITERATING;
+  MooseNonlinearConvergenceReason reason = MooseNonlinearConvergenceReason::ITERATING;
 
   // This is the first residual before any iterations have been done,
   // but after PresetBCs (if any) have been imposed on the solution
@@ -5561,26 +5675,26 @@ FEProblemBase::checkNonlinearConvergence(std::string & msg,
   if (fnorm != fnorm)
   {
     oss << "Failed to converge, function norm is NaN\n";
-    reason = MOOSE_DIVERGED_FNORM_NAN;
+    reason = MooseNonlinearConvergenceReason::DIVERGED_FNORM_NAN;
   }
   else if (fnorm < abstol && (it || !force_iteration))
   {
     oss << "Converged due to function norm " << fnorm << " < " << abstol << '\n';
-    reason = MOOSE_CONVERGED_FNORM_ABS;
+    reason = MooseNonlinearConvergenceReason::CONVERGED_FNORM_ABS;
   }
   else if (nfuncs >= max_funcs)
   {
     oss << "Exceeded maximum number of function evaluations: " << nfuncs << " > " << max_funcs
         << '\n';
-    reason = MOOSE_DIVERGED_FUNCTION_COUNT;
+    reason = MooseNonlinearConvergenceReason::DIVERGED_FUNCTION_COUNT;
   }
   else if (it && fnorm > system._last_nl_rnorm && fnorm >= div_threshold)
   {
     oss << "Nonlinear solve was blowing up!\n";
-    reason = MOOSE_DIVERGED_LINE_SEARCH;
+    reason = MooseNonlinearConvergenceReason::DIVERGED_LINE_SEARCH;
   }
 
-  if (it && !reason)
+  if (it && reason == MooseNonlinearConvergenceReason::ITERATING)
   {
     // If compute_initial_residual_before_preset_bcs==false, then use the
     // first residual computed by Petsc to determine convergence.
@@ -5591,13 +5705,13 @@ FEProblemBase::checkNonlinearConvergence(std::string & msg,
     {
       oss << "Converged due to function norm " << fnorm << " < "
           << " (relative tolerance)\n";
-      reason = MOOSE_CONVERGED_FNORM_RELATIVE;
+      reason = MooseNonlinearConvergenceReason::CONVERGED_FNORM_RELATIVE;
     }
     else if (snorm < stol * xnorm)
     {
       oss << "Converged due to small update length: " << snorm << " < " << stol << " * " << xnorm
           << '\n';
-      reason = MOOSE_CONVERGED_SNORM_RELATIVE;
+      reason = MooseNonlinearConvergenceReason::CONVERGED_SNORM_RELATIVE;
     }
   }
 
@@ -5608,7 +5722,7 @@ FEProblemBase::checkNonlinearConvergence(std::string & msg,
   if (_app.multiAppLevel() > 0)
     MooseUtils::indentMessage(_app.name(), msg);
 
-  return (reason);
+  return reason;
 }
 
 MooseLinearConvergenceReason
@@ -5626,12 +5740,12 @@ FEProblemBase::checkLinearConvergence(std::string & /*msg*/,
   {
     // Unset the flag
     _fail_next_linear_convergence_check = false;
-    return MOOSE_DIVERGED_NANORINF;
+    return MooseLinearConvergenceReason::DIVERGED_NANORINF;
   }
 
   // We initialize the reason to something that basically means MOOSE
   // has not made a decision on convergence yet.
-  MooseLinearConvergenceReason reason = MOOSE_LINEAR_ITERATING;
+  MooseLinearConvergenceReason reason = MooseLinearConvergenceReason::ITERATING;
 
   // Get a reference to our Nonlinear System
   NonlinearSystemBase & system = getNonlinearSystemBase();
@@ -5646,18 +5760,19 @@ FEProblemBase::checkLinearConvergence(std::string & /*msg*/,
 
   // If the linear residual norm is less than the System's linear absolute
   // step tolerance, we consider it to be converged and set the reason as
-  // MOOSE_CONVERGED_RTOL.
+  // MooseLinearConvergenceReason::CONVERGED_RTOL.
   if (std::abs(rnorm - system._last_rnorm) < system._l_abs_step_tol)
-    reason = MOOSE_CONVERGED_RTOL;
+    reason = MooseLinearConvergenceReason::CONVERGED_RTOL;
 
   // If we hit max its, then we consider that converged (rather than
   // KSP_DIVERGED_ITS).
   if (n >= maxits)
-    reason = MOOSE_CONVERGED_ITS;
+    reason = MooseLinearConvergenceReason::CONVERGED_ITS;
 
   // If either of our convergence criteria is met, store the number of linear
   // iterations in the System.
-  if (reason == MOOSE_CONVERGED_ITS || reason == MOOSE_CONVERGED_RTOL)
+  if (reason == MooseLinearConvergenceReason::CONVERGED_ITS ||
+      reason == MooseLinearConvergenceReason::CONVERGED_RTOL)
     system._current_l_its.push_back(static_cast<unsigned int>(n));
 
   return reason;
@@ -5794,4 +5909,12 @@ FEProblemBase::addOutput(const std::string & object_type,
   // Create the object and add it to the warehouse
   std::shared_ptr<Output> output = _factory.create<Output>(object_type, object_name, parameters);
   output_warehouse.addOutput(output);
+}
+
+void
+FEProblemBase::haveADObjects(bool have_ad_objects)
+{
+  _have_ad_objects = have_ad_objects;
+  if (_displaced_problem)
+    _displaced_problem->haveADObjects(have_ad_objects);
 }

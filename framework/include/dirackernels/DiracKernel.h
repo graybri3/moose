@@ -25,6 +25,7 @@
 #include "Restartable.h"
 #include "MeshChangedInterface.h"
 #include "MooseVariableInterface.h"
+#include "TaggingInterface.h"
 
 // Forward Declarations
 class Assembly;
@@ -53,7 +54,8 @@ class DiracKernel : public MooseObject,
                     public PostprocessorInterface,
                     protected GeometricSearchInterface,
                     public Restartable,
-                    public MeshChangedInterface
+                    public MeshChangedInterface,
+                    public TaggingInterface
 {
 public:
   DiracKernel(const InputParameters & parameters);
@@ -211,11 +213,6 @@ protected:
   const VariableValue & _u;
   /// Holds the solution gradient at the current quadrature points
   const VariableGradient & _grad_u;
-
-  /// Time derivative of the solution
-  const VariableValue & _u_dot;
-  /// Derivative of u_dot wrt u
-  const VariableValue & _du_dot_du;
 
   /// drop duplicate points or consider them in residual and Jacobian
   const bool _drop_duplicate_points;

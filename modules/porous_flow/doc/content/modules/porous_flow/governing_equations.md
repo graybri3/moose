@@ -128,7 +128,7 @@ Also note:
 
 Diffusion and dispersion are proportional to the gradient of
 $\chi_{\beta}^{\kappa}$.  A detailed discussion of multiphase diffusion and
-dispersion is contained in Appendix D of the TOUGH2 manual [citep:Pruess1999].
+dispersion is contained in Appendix D of the TOUGH2 manual [citep!Pruess1999].
 Here we use the common expression
 \begin{equation}
 \label{eq:diff_disp}
@@ -196,7 +196,7 @@ t}\epsilon_{ij}^{\mathrm{plastic}}$ term, as well as via changes in porosity and
 permeability described in [porosity](/porous_flow/porosity.md) and
 [permeability](/porous_flow/permeability.md). Coupling to the fluid flow and
 chemical reactions is via the equations of state used within the terms of [eq:heat_cons], as well as the source term $q^{T}$.  Joule-Thompson
-effects (See for instance Eq. (1) of [citet:mathias2010]) may be included via
+effects (See for instance Eq. (1) of [cite!mathias2010]) may be included via
 the fluid properties.
 
 Here it is assumed the liquids and solid are in local thermal equilibrium i.e.
@@ -406,12 +406,14 @@ input file.
 | $(\rho)(\dot{P}/M - A\dot{T} + \alpha_{B}\dot{\epsilon}_{v})$ | [`PorousFlowFullySaturatedMassTimeDerivative`](PorousFlowFullySaturatedMassTimeDerivative.md) |
 | $\frac{\partial}{\partial t}\left((1 - \phi)C^{\kappa}\right)$ | [`PorousFlowDesorpedMassTimeDerivative`](PorousFlowDesorpedMassTimeDerivative.md) |
 | $-\nabla\cdot \sum_{\beta}\chi_{\beta}^{\kappa} \rho_{\beta}\frac{k\,k_{\mathrm{r,}\beta}}{\mu_{\beta}}(\nabla P_{\beta} - \rho_{\beta} \mathbf{g})$ | [`PorousFlowAdvectiveFlux`](PorousFlowAdvectiveFlux.md) |
+| $-\nabla\cdot \sum_{\beta}\chi_{\beta}^{\kappa} \rho_{\beta}\frac{k\,k_{\mathrm{r,}\beta}}{\mu_{\beta}}(\nabla P_{\beta} - \rho_{\beta} \mathbf{g})$ | [`PorousFlowFluxLimitedTVDAdvection`](PorousFlowFluxLimitedTVDAdvection.md) |
 | $-\nabla\cdot \sum_{\beta}\rho_{\beta}{\mathcal{D}}_{\beta}^{\kappa}\nabla \chi_{\beta}^{\kappa}$ | [`PorousFlowDispersiveFlux`](PorousFlowDispersiveFlux.md) |
 | $-\nabla\cdot ((\rho)k(\nabla P - \rho \mathbf{g})/\mu)$ | [`PorousFlowFullySaturatedDarcyBase`](PorousFlowFullySaturatedDarcyBase.md) |
 | $-\nabla\cdot (\rho\chi^{\kappa} k(\nabla P - \rho \mathbf{g})/\mu)$ | [`PorousFlowFullySaturatedDarcyFlow`](PorousFlowFullySaturatedDarcyFlow.md) |
 | $\frac{\partial}{\partial t}\left((1-\phi)\rho_{R}C_{R}T + \phi\sum_{\beta}S_{\beta}\rho_{\beta}\mathcal{E}_{\beta}\right)$ | [`PorousFlowEnergyTimeDerivative`](PorousFlowEnergyTimeDerivative.md) |
 | $-\nabla\cdot \left(\lambda \nabla T\right)$ | [`PorousFlowHeatConduction`](PorousFlowHeatConduction.md) |
 | $-\nabla\cdot \sum_{\beta}h_{\beta} \rho_{\beta}\frac{k\,k_{\mathrm{r,}\beta}}{\mu_{\beta}}(\nabla P_{\beta} - \rho_{\beta} \mathbf{g})$ | [`PorousFlowHeatAdvection`](PorousFlowHeatAdvection.md) |
+| $-\nabla\cdot \sum_{\beta}h_{\beta} \rho_{\beta}\frac{k\,k_{\mathrm{r,}\beta}}{\mu_{\beta}}(\nabla P_{\beta} - \rho_{\beta} \mathbf{g})$ | [`PorousFlowFluxLimitedTVDAdvection`](PorousFlowFluxLimitedTVDAdvection.md) |
 | $-\nabla\cdot ((\rho)h k(\nabla P - \rho \mathbf{g})/\mu)$ | [`PorousFlowFullySaturatedHeatAdvection`](PorousFlowFullySaturatedHeatAdvection.md) |
 | $\mathcal{E}\nabla\cdot\mathbf{v}_{s}$ | [`PorousFlowHeatVolumetricExpansion`](PorousFlowHeatVolumetricExpansion.md) |
 | $-\nu (1-\phi)\sigma^{\mathrm{eff}}_{ij}\frac{\partial}{\partial t}\epsilon_{ij}^{\mathrm{plastic}}$ | [`PorousFlowPlasticHeatEnergy`](PorousFlowPlasticHeatEnergy.md) |

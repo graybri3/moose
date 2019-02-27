@@ -122,7 +122,7 @@ class VectorPostprocessorReader(object):
         """
         Returns the list of available time indices contained in the data.
         """
-        return list(self.data.keys().values)
+        return self.data.keys().values.tolist()
 
     def clear(self):
         """
@@ -207,7 +207,11 @@ class VectorPostprocessorReader(object):
         """
 
         # The list of files from the supplied pattern
-        filenames = sorted(glob.glob(self.filename))
+        filenames = []
+        for fname in sorted(glob.glob(self.filename)):
+            if fname.endswith('LATEST') or fname.endswith('FINAL'):
+                continue
+            filenames.append(fname)
 
         # Remove the "_time.csv" from the list, if it exists
         try:

@@ -20,11 +20,11 @@
 #include <memory> //std::unique_ptr
 
 // libMesh
-#include "libmesh/bounding_box.h"
 #include "libmesh/elem_range.h"
 #include "libmesh/mesh_base.h"
 #include "libmesh/node_range.h"
 #include "libmesh/nanoflann.hpp"
+#include "libmesh/vector_value.h"
 
 // forward declaration
 class MooseMesh;
@@ -39,6 +39,7 @@ class QBase;
 class PeriodicBoundaries;
 class Partitioner;
 class GhostingFunctor;
+class BoundingBox;
 }
 
 // Useful typedefs
@@ -78,10 +79,15 @@ public:
   MooseMesh(const InputParameters & parameters);
   MooseMesh(const MooseMesh & other_mesh);
 
-  /**
-   * Destructor
-   */
   virtual ~MooseMesh();
+
+  // The type of libMesh::MeshBase that will be used
+  enum class ParallelType
+  {
+    DEFAULT,
+    REPLICATED,
+    DISTRIBUTED
+  };
 
   /**
    * Clone method.  Allocates memory you are responsible to clean up.
@@ -94,6 +100,18 @@ public:
    * less likely that the caller will leak the memory in question.
    */
   virtual std::unique_ptr<MooseMesh> safeClone() const = 0;
+
+  /**
+   * Method to construct a libMesh::MeshBase object that is normally set and used by the MooseMesh
+   * object during the "init()" phase.
+   */
+  std::unique_ptr<MeshBase> buildMeshBaseObject(ParallelType override_type = ParallelType::DEFAULT);
+
+  /**
+   * Method to set the mesh_base object. If this method is NOT called prior to calling init(), a
+   * MeshBase object will be automatically constructed and set.
+   */
+  void setMeshBase(std::unique_ptr<MeshBase> mesh_base);
 
   /**
    * Initialize the Mesh object.  Most of the time this will turn around
@@ -116,6 +134,13 @@ public:
    * object.
    */
   virtual unsigned int dimension() const;
+
+  /**
+   * Returns the effective spatial dimension determined by the coordinates actually used by the
+   * mesh. This means that a 1D mesh that has non-zero z or y coordinates is actually a 2D or 3D
+   * mesh, respectively. Likewise a 2D mesh that has non-zero z coordinates is actually 3D mesh.
+   */
+  virtual unsigned int effectiveSpatialDimension() const;
 
   /**
    * Returns a vector of boundary IDs for the requested element on the
@@ -261,7 +286,7 @@ public:
    * Setter/getter for the _is_prepared flag.
    */
   bool prepared() const;
-  void prepared(bool state);
+  virtual void prepared(bool state);
 
   /**
    * If this method is called, we will call libMesh's prepare_for_use method when we
@@ -838,7 +863,7 @@ protected:
 
   /// Can be set to DISTRIBUTED, REPLICATED, or DEFAULT.  Determines whether
   /// the underlying libMesh mesh is a ReplicatedMesh or DistributedMesh.
-  MooseEnum _mesh_parallel_type;
+  ParallelType _parallel_type;
 
   /// False by default.  Final value is determined by several factors
   /// including the 'distribution' setting in the input file, and whether

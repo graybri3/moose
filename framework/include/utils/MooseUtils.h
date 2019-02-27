@@ -12,9 +12,12 @@
 
 // MOOSE includes
 #include "HashMap.h"
-#include "MaterialProperty.h" // MaterialProperties
 #include "InfixIterator.h"
 #include "MooseEnumItem.h"
+#include "MooseError.h"
+#include "Moose.h"
+
+#include "libmesh/compare_types.h"
 
 // C++ includes
 #include <string>
@@ -26,6 +29,7 @@
 // Forward Declarations
 class InputParameters;
 class ExecFlagEnum;
+class MaterialProperties;
 
 namespace libMesh
 {
@@ -36,9 +40,28 @@ class Communicator;
 }
 }
 class MultiMooseEnum;
+namespace MetaPhysicL
+{
+template <typename, typename>
+class DualNumber;
+}
+namespace std
+{
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> abs(const MetaPhysicL::DualNumber<T, D> & in);
+template <typename T, typename D>
+MetaPhysicL::DualNumber<T, D> abs(MetaPhysicL::DualNumber<T, D> && in);
+}
 
 namespace MooseUtils
 {
+
+/**
+ * Replaces "LATEST" placeholders with the latest checkpoint file name.  If base_only is true, then
+ * only return the base-name of the checkpoint directory - otherwise, a full mesh
+ * checkpoint file path is returned.
+ */
+std::string convertLatestCheckpoint(std::string orig, bool base_only = true);
 
 /// Computes and returns the Levenshtein distance between strings s1 and s2.
 int levenshteinDist(const std::string & s1, const std::string & s2);
@@ -54,6 +77,25 @@ void escape(std::string & str);
  * Standard scripting language trim function
  */
 std::string trim(const std::string & str, const std::string & white_space = " \t\n\v\f\r");
+
+/**
+ * Python like split function for strings.
+ *
+ * NOTE: This is similar to the tokenize function, but it maintains empty items, which tokenize does
+ *       not. For example, "foo;bar;;" becomes {"foo", "bar", "", ""}.
+ */
+std::vector<std::string> split(const std::string & str, const std::string & delimiter);
+
+/**
+ * Python like join function for strings.
+ */
+template <typename T>
+std::string join(const T & strings, const std::string & delimiter);
+
+/**
+ * Check the file size.
+ */
+std::size_t fileSize(const std::string & filename);
 
 /**
  * This function tokenizes a path and checks to see if it contains the string to look for
@@ -179,9 +221,19 @@ doesMapContainValue(const std::map<T1, T2> & the_map, const T2 & value)
  * @param tol The tolerance to be used
  * @return true if var1 and var2 are equal within tol
  */
-bool absoluteFuzzyEqual(const libMesh::Real & var1,
-                        const libMesh::Real & var2,
-                        const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename T3 = T,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value &&
+                                      ScalarTraits<T3>::value,
+                                  int>::type = 0>
+bool
+absoluteFuzzyEqual(const T & var1,
+                   const T2 & var2,
+                   const T3 & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (std::abs(var1 - var2) <= tol);
+}
 
 /**
  * Function to check whether a variable is greater than or equal to another variable within an
@@ -237,9 +289,16 @@ bool absoluteFuzzyLessThan(const libMesh::Real & var1,
  * @param tol The relative tolerance to be used
  * @return true if var1 and var2 are equal within relative tol
  */
-bool relativeFuzzyEqual(const libMesh::Real & var1,
-                        const libMesh::Real & var2,
-                        const libMesh::Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE);
+template <typename T,
+          typename T2,
+          typename std::enable_if<ScalarTraits<T>::value && ScalarTraits<T2>::value, int>::type = 0>
+bool
+relativeFuzzyEqual(const T & var1,
+                   const T2 & var2,
+                   const Real & tol = libMesh::TOLERANCE * libMesh::TOLERANCE)
+{
+  return (absoluteFuzzyEqual(var1, var2, tol * (std::abs(var1) + std::abs(var2))));
+}
 
 /**
  * Function to check whether a variable is greater than or equal to another variable within a
@@ -463,6 +522,16 @@ unsigned long long int convert<unsigned long long int>(const std::string & str,
                                                        bool throw_on_failure);
 
 /**
+ * Create a symbolic link, if the link already exists it is replaced.
+ */
+void createSymlink(const std::string & target, const std::string & link);
+
+/**
+ * Remove a symbolic link, if the given filename is a link.
+ */
+void clearSymlink(const std::string & link);
+
+/**
  * Convert supplied string to upper case.
  * @params name The string to convert upper case.
  */
@@ -534,6 +603,36 @@ ExecFlagEnum getDefaultExecFlagEnum();
  * @param throw_on_failure Throw an invalid_argument exception instead of mooseError.
  */
 int stringToInteger(const std::string & input, bool throw_on_failure = false);
+
+/**
+ * Linearly partition a number of items
+ *
+ * @param num_items The number of items to partition
+ * @param num_chunks The number of chunks to partition into
+ * @param chunk_id The ID of the chunk you are trying to get information about (typically the
+ * current MPI rank)
+ * @param num_local_items Output: The number of items for this chunk_id
+ * @param local_items_begin Output: The first item for this chunk_id
+ * @param local_items_end Output: One past the final item for this chunk_id
+ */
+void linearPartitionItems(dof_id_type num_items,
+                          dof_id_type num_chunks,
+                          dof_id_type chunk_id,
+                          dof_id_type & num_local_items,
+                          dof_id_type & local_items_begin,
+                          dof_id_type & local_items_end);
+
+/**
+ * Return the chunk_id that is assigned to handle item_id
+ *
+ * @param num_items Global number of items to partition
+ * @param num_chunks Total number of chunks to split into
+ * @param item_id The item to find the chunk_id for
+ * @return The chunk_id of the chunk that contains item_id
+ */
+processor_id_type
+linearPartitionChunk(dof_id_type num_items, dof_id_type num_chunks, dof_id_type item_id);
+
 } // MooseUtils namespace
 
 /**

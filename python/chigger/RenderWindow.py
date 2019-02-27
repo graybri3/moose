@@ -12,10 +12,12 @@ import os
 import vtk
 
 import base
+import annotations
 import observers
 import misc
 import mooseutils
 
+VTK_MAJOR_VERSION = vtk.vtkVersion.GetVTKMajorVersion()
 
 class RenderWindow(base.ChiggerObject):
     """
@@ -33,10 +35,11 @@ class RenderWindow(base.ChiggerObject):
                 allow=['interactive', 'modal', 'interactive2D'])
         opt.add('test', False, "When True the interaction is disabled and the window closes "
                                "immediately after rendering.")
+        opt.add('motion_factor', "Control the interaction motion rate. "
+                                 "(calls vtkInteractorStyle::SetMotionFactor)")
         opt.add('offscreen', False, "Enable offscreen rendering.")
         opt.add('chigger', False, "Places a chigger logo in the lower left corner.")
         opt.add('smoothing', False, "Enable VTK render window smoothing options.")
-        opt.add('multisamples', None, "Set the number of multi-samples.", vtype=int)
         opt.add('antialiasing', 0, "Number of antialiasing frames to perform "
                                    "(set vtkRenderWindow::SetAAFrames).", vtype=int)
 
@@ -63,8 +66,15 @@ class RenderWindow(base.ChiggerObject):
         self._results = [misc.ChiggerBackground()]
         self.__active = None
 
+        self.__watermark = annotations.ImageAnnotation(filename='chigger_white.png',
+                                                       width=0.025,
+                                                       horizontal_alignment='left',
+                                                       vertical_alignment='bottom',
+                                                       position=[0, 0])
         # Store the supplied result objects
         self.append(*args)
+        if kwargs.pop('chigger', False):
+            self.append(self.__watermark)
 
     def __contains__(self, item):
         """
@@ -193,6 +203,10 @@ class RenderWindow(base.ChiggerObject):
             elif style == 'modal':
                 self.__vtkinteractor.SetInteractorStyle(vtk.vtkInteractorStyleUser())
 
+        if self.isOptionValid('motion_factor'):
+            self.__vtkinteractor.GetInteractorStyle(). \
+                SetMotionFactor(self.getOption('motion_factor'))
+
         # Background settings
         self._results[0].updateOptions(self._options)
 
@@ -206,12 +220,6 @@ class RenderWindow(base.ChiggerObject):
             self.__vtkwindow.SetPolygonSmoothing(smooth)
             self.__vtkwindow.SetPointSmoothing(smooth)
 
-        if self.isOptionValid('antialiasing'):
-            self.__vtkwindow.SetAAFrames(self.getOption('antialiasing'))
-
-        if self.isOptionValid('multisamples'):
-            self.__vtkwindow.SetMultiSamples(self.getOption('multisamples'))
-
         if self.isOptionValid('size'):
             self.__vtkwindow.SetSize(self.getOption('size'))
 
@@ -221,6 +229,13 @@ class RenderWindow(base.ChiggerObject):
         n = self.__vtkwindow.GetNumberOfLayers()
         for result in self._results:
             renderer = result.getVTKRenderer()
+            if self.isOptionValid('antialiasing'):
+                if VTK_MAJOR_VERSION < 8:
+                    self.__vtkwindow.SetAAFrames(self.getOption('antialiasing'))
+                else:
+                    renderer.SetUseFXAA(True)
+                    self.__vtkwindow.SetMultiSamples(self.getOption('antialiasing'))
+
             if not self.__vtkwindow.HasRenderer(renderer):
                 self.__vtkwindow.AddRenderer(renderer)
             if result.needsUpdate():

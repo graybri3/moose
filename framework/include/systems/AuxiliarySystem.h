@@ -63,8 +63,16 @@ public:
    * @param name The name of the integrator
    * @param parameters Integrator params
    */
-  void
-  addTimeIntegrator(const std::string & type, const std::string & name, InputParameters parameters);
+  void addTimeIntegrator(const std::string & type,
+                         const std::string & name,
+                         InputParameters parameters) override;
+  using SystemBase::addTimeIntegrator;
+
+  /**
+   * Adds u_dot, u_dotdot, u_dot_old and u_dotdot_old
+   * vectors if requested by the time integrator
+   */
+  void addDotVectors();
 
   /**
    * Adds an auxiliary kernel
@@ -95,7 +103,9 @@ public:
     return _current_solution;
   }
 
-  virtual NumericVector<Number> & solutionUDot() override;
+  virtual NumericVector<Number> * solutionUDot() override { return _u_dot; }
+
+  virtual NumericVector<Number> * solutionUDotDot() override { return _u_dotdot; }
 
   virtual void serializeSolution();
   virtual NumericVector<Number> & serializedSolution() override;
@@ -154,12 +164,18 @@ public:
   virtual System & system() override { return _sys; }
   virtual const System & system() const override { return _sys; }
 
+  virtual NumericVector<Number> * solutionUDotOld() override { return _u_dot_old; }
+  virtual NumericVector<Number> * solutionUDotDotOld() override { return _u_dotdot_old; }
   virtual NumericVector<Number> * solutionPreviousNewton() override
   {
     return _solution_previous_nl;
   }
 
   virtual void setPreviousNewtonSolution();
+
+  void setScalarVariableCoupleableTags(ExecFlagType type);
+
+  void clearScalarVariableCoupleableTags();
 
 protected:
   void computeScalarVars(ExecFlagType type);
@@ -179,7 +195,14 @@ protected:
   /// Time integrator
   std::shared_ptr<TimeIntegrator> _time_integrator;
   /// solution vector for u^dot
-  NumericVector<Number> & _u_dot;
+  NumericVector<Number> * _u_dot;
+  /// solution vector for u^dotdot
+  NumericVector<Number> * _u_dotdot;
+
+  /// Old solution vector for u^dot
+  NumericVector<Number> * _u_dot_old;
+  /// Old solution vector for u^dotdot
+  NumericVector<Number> * _u_dotdot_old;
 
   /// Whether or not a copy of the residual needs to be made
   bool _need_serialized_solution;

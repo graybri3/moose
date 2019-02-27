@@ -17,6 +17,51 @@ class SinglePhaseFluidProperties;
 template <>
 InputParameters validParams<SinglePhaseFluidProperties>();
 
+#define propfunc(want, prop1, prop2)                                                               \
+  virtual Real want##_from_##prop1##_##prop2(Real, Real) const                                     \
+  {                                                                                                \
+    mooseError(name(), ": ", __PRETTY_FUNCTION__, " not implemented.");                            \
+  }                                                                                                \
+                                                                                                   \
+  virtual void want##_from_##prop1##_##prop2(                                                      \
+      Real prop1, Real prop2, Real & val, Real & d##want##d1, Real & d##want##d2) const            \
+  {                                                                                                \
+    fluidPropError(name(), ": ", __PRETTY_FUNCTION__, " derivatives not implemented.");            \
+    d##want##d1 = 0;                                                                               \
+    d##want##d2 = 0;                                                                               \
+    val = want##_from_##prop1##_##prop2(prop1, prop2);                                             \
+  }                                                                                                \
+                                                                                                   \
+  FPDualReal want##_from_##prop1##_##prop2(const FPDualReal & p1, const FPDualReal & p2) const     \
+  {                                                                                                \
+    Real x = 0;                                                                                    \
+    Real raw1 = p1.value();                                                                        \
+    Real raw2 = p2.value();                                                                        \
+    Real dxd1 = 0;                                                                                 \
+    Real dxd2 = 0;                                                                                 \
+    want##_from_##prop1##_##prop2(raw1, raw2, x, dxd1, dxd2);                                      \
+                                                                                                   \
+    FPDualReal result = x;                                                                         \
+    for (std::size_t i = 0; i < p1.derivatives().size(); i++)                                      \
+      result.derivatives()[i] = p1.derivatives()[i] * dxd1 + p2.derivatives()[i] * dxd2;           \
+    return result;                                                                                 \
+  }                                                                                                \
+                                                                                                   \
+  DualReal want##_from_##prop1##_##prop2(const DualReal & p1, const DualReal & p2) const           \
+  {                                                                                                \
+    Real x = 0;                                                                                    \
+    Real raw1 = p1.value();                                                                        \
+    Real raw2 = p2.value();                                                                        \
+    Real dxd1 = 0;                                                                                 \
+    Real dxd2 = 0;                                                                                 \
+    want##_from_##prop1##_##prop2(raw1, raw2, x, dxd1, dxd2);                                      \
+                                                                                                   \
+    DualReal result = x;                                                                           \
+    for (size_t i = 0; i < p1.derivatives().size(); i++)                                           \
+      result.derivatives()[i] = p1.derivatives()[i] * dxd1 + p2.derivatives()[i] * dxd2;           \
+    return result;                                                                                 \
+  }
+
 /**
  * Common class for single phase fluid properties
  */
@@ -32,191 +77,122 @@ public:
    */
   virtual std::string fluidName() const;
 
-  /**
-   * Pressure from specific volume and specific internal energy
-   *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   */
-  virtual Real p_from_v_e(Real v, Real e) const;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+  // clang-format off
 
   /**
-   * Pressure and its derivatives from specific volume and specific internal energy
+   * @brief Compute a fluid property given for the state defined by two given properties.
    *
-   * @param[in] v        specific volume
-   * @param[in] e        specific internal energy
-   * @param[out] p       pressure
-   * @param[out] dp_dv   derivative of pressure w.r.t. specific volume
-   * @param[out] dp_de   derivative of pressure w.r.t. specific internal energy
+   * For all functions, the first two arguments are the given properties that define the fluid
+   * state.  For the two-argument variants, the desired property is the return value.
+   * The five-argument variants also provide partial derivatives dx/da and dx/db where x is the desired property being
+   * computed, a is the first given property, and b is the second given property.  The desired
+   * property, dx/da, and dx/db are stored into the 3rd, 4th, and 5th arguments respectively.
+   *
+   * Properties/parameters used in these function are listed below with their units:
+   *
+   * @begincode
+   * p      pressure [Pa]
+   * T      temperature [K]
+   * e      specific internal energy [J/kg]
+   * v      specific volume [m^3/kg]
+   * rho    density [kg/m^3]
+   * h      specific enthalpy [J/kg]
+   * s      specific entropy [J/(kg*K)]
+   * mu     viscosity [Pa*s]
+   * k      thermal conductivity [W/(m*K)]
+   * c      speed of sound [m/s]
+   * cp     constant-pressure specific heat [J/K]
+   * cv     constant-volume specific heat [J/K]
+   * beta   volumetric thermal expansion coefficient [1/K]
+   * g      Gibbs free energy [J]
+   * pp_sat partial pressure at saturation [Pa]
+   * @endcode
+   *
+   * As an example:
+   *
+   * @begincode
+   * // calculate pressure given specific vol and energy:
+   * auto pressure = your_fluid_properties_object.p_from_v_e(specific_vol, specific_energy);
+   *
+   * // or use the derivative variant:
+   * Real dp_dv = 0; // derivative will be stored into here
+   * Real dp_de = 0; // derivative will be stored into here
+   * your_fluid_properties_object.p_from_v_e(specific_vol, specific_energy, pressure, dp_dv, dp_de);
+   * @endcode
+   *
+   * Automatic differentiation (AD) support is provided through x_from_a_b(DualReal a, DualReal b) versions
+   * of the functions where a and b must be ADReal/DualNumber's calculated using all AD-supporting
+   * values:
+   *
+   * @begincode
+   * auto v = 1/rho; // rho must be an AD non-linear variable.
+   * auto e = rhoE/rho - vel_energy; // rhoE and vel_energy must be AD variables/numbers also.
+   * auto pressure = your_fluid_properties_object.p_from_v_e(v, e);
+   * // pressure now contains partial derivatives w.r.t. all degrees of freedom
+   * @endcode
    */
-  virtual void p_from_v_e(Real v, Real e, Real & p, Real & dp_dv, Real & dp_de) const;
+  ///@{
+  propfunc(p, v, e)
+  propfunc(T, v, e)
+  propfunc(c, v, e)
+  propfunc(cp, v, e)
+  propfunc(cv, v, e)
+  propfunc(mu, v, e)
+  propfunc(k, v, e)
+  propfunc(s, v, e)
+  propfunc(s, h, p)
+  propfunc(rho, p, s)
+  propfunc(e, v, h)
+  propfunc(s, p, T)
+  propfunc(pp_sat, p, T)
+  propfunc(mu, rho, T)
+  propfunc(k, rho, T)
+  propfunc(c, p, T)
+  propfunc(cp, p, T)
+  propfunc(cv, p, T)
+  propfunc(mu, p, T)
+  propfunc(k, p, T)
+  propfunc(rho, p, T)
+  propfunc(e, p, rho)
+  propfunc(e, T, v)
+  propfunc(p, T, v)
+  propfunc(h, T, v)
+  propfunc(s, T, v)
+  propfunc(cv, T, v)
+  propfunc(h, p, T)
+  propfunc(p, h, s)
+  propfunc(g, v, e)
+  ///@}
+
+  // clang-format on
+
+#undef propfunc
+#pragma GCC diagnostic pop
+
+                              virtual Real s(Real pressure, Real temperature) const;
 
   /**
-   * Temperature from specific volume and specific internal energy
+   * Dynamic viscosity and its derivatives wrt density and temperature
+   * TODO: this shouldn't need 3 input args - AD will assume/call the 2-input version.
    *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   * @return sound speed
+   * @param density fluid density (kg/m^3)
+   * @param temperature fluid temperature (K)
+   * @param ddensity_dT derivative of density wrt temperature
+   * @param[out] mu viscosity (Pa.s)
+   * @param[out] dmu_drho derivative of viscosity wrt density
+   * @param[out] dmu_dT derivative of viscosity wrt temperature
    */
-  virtual Real T_from_v_e(Real v, Real e) const;
+  virtual void mu_from_rho_T(Real density,
+                             Real temperature,
+                             Real ddensity_dT,
+                             Real & mu,
+                             Real & dmu_drho,
+                             Real & dmu_dT) const;
 
-  /**
-   * Temperature and its derivatives from specific volume and specific internal energy
-   *
-   * @param[in] v        specific volume
-   * @param[in] e        specific internal energy
-   * @param[out] T       temperature
-   * @param[out] dT_dv   derivative of temperature w.r.t. specific volume
-   * @param[out] dT_de   derivative of temperature w.r.t. specific internal energy
-   */
-  virtual void T_from_v_e(Real v, Real e, Real & T, Real & dT_dv, Real & dT_de) const;
-
-  /**
-   * Sound speed from specific volume and specific internal energy
-   *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   */
-  virtual Real c_from_v_e(Real v, Real e) const;
-
-  /**
-   * Sound speed and its derivatives from specific volume and specific internal energy
-   *
-   * @param[in]  v       specific volume
-   * @param[in]  e       specific internal energy
-   * @param[out] dc_dv   derivative of sound speed w.r.t. specific volume
-   * @param[out] dc_de   derivative of sound speed w.r.t. specific internal energy
-   */
-  virtual void c_from_v_e(Real v, Real e, Real & c, Real & dc_dv, Real & dc_de) const;
-
-  /**
-   * Isobaric (constant-pressure) specific heat from specific volume and specific
-   * internal energy
-   *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   */
-  virtual Real cp_from_v_e(Real v, Real e) const;
-
-  /**
-   * Isochoric (constant-volume) specific heat from specific volume and specific
-   * internal energy
-   *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   */
-  virtual Real cv_from_v_e(Real v, Real e) const;
-
-  /**
-   * Dynamic viscosity from specific volume and specific internal energy
-   *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   */
-  virtual Real mu_from_v_e(Real v, Real e) const;
-
-  /**
-   * Thermal conductivity from specific volume and specific internal energy
-   *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   */
-  virtual Real k_from_v_e(Real v, Real e) const;
-
-  /**
-   * Specific entropy from specific volume and specific internal energy
-   *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   */
-  virtual Real s_from_v_e(Real v, Real e) const;
-
-  /**
-   * Specific entropy and its derivatives from specific volume and specific internal energy
-   *
-   * @param[in] v        specific volume
-   * @param[in] e        specific internal energy
-   * @param[out] s       specific entropy
-   * @param[out] ds_dv   derivative of specific entropy w.r.t. specific volume
-   * @param[out] ds_de   derivative of specific entropy w.r.t. specific internal energy
-   */
-  virtual void s_from_v_e(Real v, Real e, Real & s, Real & ds_dv, Real & ds_de) const;
-
-  /**
-   * Specific entropy from pressure and temperature
-   *
-   * @param[in] p   pressure
-   * @param[in] T   temperature
-   */
-  virtual Real s_from_p_T(Real p, Real T) const;
-  virtual Real s(Real pressure, Real temperature) const;
-
-  /**
-   * Specific entropy and its derivatives from pressure and temperature
-   *
-   * @param[in] p        pressure
-   * @param[in] T        temperature
-   * @param[out] s       specific entropy
-   * @param[out] ds_dp   derivative of specific entropy w.r.t. pressure
-   * @param[out] ds_dT   derivative of specific entropy w.r.t. temperature
-   */
-  virtual void s_from_p_T(Real p, Real T, Real & s, Real & ds_dp, Real & ds_dT) const;
-
-  /**
-   * Specific entropy from specific enthalpy and pressure
-   *
-   * @param[in] h   specific enthalpy
-   * @param[in] p   pressure
-   */
-  virtual Real s_from_h_p(Real h, Real p) const;
-
-  /**
-   * Specific entropy and its derivatives from specific enthalpy and pressure
-   *
-   * @param[in] h        specific enthalpy
-   * @param[in] p        pressure
-   * @param[out] s       specific entropy
-   * @param[out] ds_dh   derivative of specific entropy w.r.t. specific enthalpy
-   * @param[out] ds_dp   derivative of specific entropy w.r.t. pressure
-   */
-  virtual void s_from_h_p(Real h, Real p, Real & s, Real & ds_dh, Real & ds_dp) const;
-
-  /**
-   * Density from pressure and specific entropy
-   *
-   * @param[in] p   pressure
-   * @param[in] s   specific entropy
-   */
-  virtual Real rho_from_p_s(Real p, Real s) const;
-
-  /**
-   * Density and its derivatives from pressure and specific entropy
-   *
-   * @param[in] p          pressure
-   * @param[in] s          specific entropy
-   * @param[out] rho       density
-   * @param[out] drho_dp   derivative of density w.r.t. pressure
-   * @param[out] drho_ds   derivative of density w.r.t. specific entropy
-   */
-  virtual void rho_from_p_s(Real p, Real s, Real & rho, Real & drho_dp, Real & drho_ds) const;
-
-  /**
-   * Specific internal energy as a function of specific volume and specific enthalpy
-   *
-   * @param[in] v   specific volume
-   * @param[in] h   specific enthalpy
-   */
-  virtual Real e_from_v_h(Real v, Real h) const;
-
-  /**
-   * Specific internal energy and derivatives as a function of specific volume and specific enthalpy
-   *
-   * @param[in]  v       specific volume
-   * @param[in]  h       specific enthalpy
-   * @param[out] de_dv   derivative of specific internal energy w.r.t. specific volume
-   * @param[out] de_dh   derivative of specific internal energy w.r.t. specific enthalpy
-   */
-  virtual void e_from_v_h(Real v, Real h, Real & e, Real & de_dv, Real & de_dh) const;
+  virtual Real beta_from_p_T(Real, Real) const;
+  virtual void beta_from_p_T(Real, Real, Real &, Real &, Real &) const;
 
   /**
    * Density from pressure and temperature
@@ -225,7 +201,6 @@ public:
    * @param[in] T   temperature (K)
    * @return density (kg/m^3)
    */
-  virtual Real rho_from_p_T(Real p, Real T) const;
   virtual Real rho(Real p, Real T) const;
 
   /**
@@ -237,7 +212,6 @@ public:
    * @param[out] drho_dp   derivative of density w.r.t. pressure
    * @param[out] drho_dT   derivative of density w.r.t. temperature
    */
-  virtual void rho_from_p_T(Real p, Real T, Real & rho, Real & drho_dp, Real & drho_dT) const;
   virtual void
   rho_dpT(Real pressure, Real temperature, Real & rho, Real & drho_dp, Real & drho_dT) const;
 
@@ -261,25 +235,6 @@ public:
   virtual void v_from_p_T(Real p, Real T, Real & v, Real & dv_dp, Real & dv_dT) const;
 
   /**
-   * Specific internal energy from pressure and density
-   *
-   * @param[in] p     pressure
-   * @param[in] rho   density
-   */
-  virtual Real e_from_p_rho(Real p, Real rho) const;
-
-  /**
-   * Specific internal energy and its derivatives from pressure and density
-   *
-   * @param[in] p          pressure
-   * @param[in] rho        density
-   * @param[out] e         specific internal energy
-   * @param[out] de_dp     derivative of specific internal energy w.r.t. pressure
-   * @param[out] de_drho   derivative of specific internal energy w.r.t. density
-   */
-  virtual void e_from_p_rho(Real p, Real rho, Real & e, Real & de_dp, Real & de_drho) const;
-
-  /**
    * Specific internal energy from temperature and specific volume
    *
    * @param[in] T     temperature
@@ -296,96 +251,12 @@ public:
   virtual void v_e_spndl_from_T(Real T, Real & v, Real & e) const;
 
   /**
-   * Specific volume and specific internal energy from temerature at the vapor spinodal
-   *
-   * @param[in] T     temerature
-   */
-  virtual Real e_from_T_v(Real T, Real v) const;
-
-  /**
-   * Specific internal energy and its derivatives from temperature and specific volume
-   *
-   * @param[in] T     temperature
-   * @param[in] v     specific volume
-   * @param[out] e       specific internal energy (J/kg)
-   * @param[out] de_dT   derivative of specific internal energy w.r.t. temperature
-   * @param[out] de_dv   derivative of specific internal energy w.r.t. specific volume
-   */
-  virtual void e_from_T_v(Real T, Real v, Real & e, Real & de_dT, Real & de_dv) const;
-
-  /**
-   * Pressure from temperature and specific volume
-   *
-   * @param[in] T     temperature
-   * @param[in] v     specific volume
-   */
-  virtual Real p_from_T_v(Real T, Real v) const;
-
-  /**
-   * Pressure and its derivatives from temperature and specific volume
-   *
-   * @param[in] T     temperature
-   * @param[in] v     specific volume
-   * @param[out] p       pressure (Pa)
-   * @param[out] dp_dT   derivative of pressure w.r.t. temperature
-   * @param[out] dp_dv   derivative of pressure w.r.t. specific volume
-   */
-  virtual void p_from_T_v(Real T, Real v, Real & p, Real & dp_dT, Real & dp_dv) const;
-
-  /**
-   * Specific enthalpy from temperature and specific volume
-   *
-   * @param[in] T     temperature
-   * @param[in] v     specific volume
-   */
-  virtual Real h_from_T_v(Real T, Real v) const;
-
-  /**
-   * Specific enthalpy and its derivatives from temperature and specific volume
-   *
-   * @param[in] T     temperature
-   * @param[in] v     specific volume
-   * @param[out] h       specific enthalpy (J/kg)
-   * @param[out] dh_dT   derivative of specific enthalpy w.r.t. temperature
-   * @param[out] dh_dv   derivative of specific enthalpy w.r.t. specific volume
-   */
-  virtual void h_from_T_v(Real T, Real v, Real & h, Real & dh_dT, Real & dh_dv) const;
-
-  /**
-   * Specific entropy from temperature and specific volume
-   *
-   * @param[in] T     temperature
-   * @param[in] v     specific volume
-   */
-  virtual Real s_from_T_v(Real T, Real v) const;
-
-  /**
-   * Specific entropy and its derivatives from temperature and specific volume
-   *
-   * @param[in] T     temperature
-   * @param[in] v     specific volume
-   * @param[out] s       specific entropy (J/kg)
-   * @param[out] ds_dT   derivative of specific entropy w.r.t. temperature
-   * @param[out] ds_dv   derivative of specific entropy w.r.t. specific volume
-   */
-  virtual void s_from_T_v(Real T, Real v, Real & s, Real & ds_dT, Real & ds_dv) const;
-
-  /**
-   * Specific isochoric heat capacity from temperature and specific volume
-   *
-   * @param[in] T     temperature
-   * @param[in] v     specific volume
-   */
-  virtual Real cv_from_T_v(Real T, Real v) const;
-
-  /**
    * Specific enthalpy from pressure and temperature
    *
    * @param[in] p   pressure (Pa)
    * @param[in] T   temperature (K)
    * @return h (J/kg)
    */
-  virtual Real h_from_p_T(Real p, Real T) const;
   virtual Real h(Real p, Real T) const;
 
   /**
@@ -397,7 +268,6 @@ public:
    * @param[out] dh_dp   derivative of specific enthalpy w.r.t. pressure
    * @param[out] dh_dT   derivative of specific enthalpy w.r.t. temperature
    */
-  virtual void h_from_p_T(Real p, Real T, Real & h, Real & dh_dp, Real & dh_dT) const;
   virtual void h_dpT(Real pressure, Real temperature, Real & h, Real & dh_dp, Real & dh_dT) const;
 
   /**
@@ -422,48 +292,7 @@ public:
   virtual void e_from_p_T(Real p, Real T, Real & e, Real & de_dp, Real & de_dT) const;
   virtual void e_dpT(Real pressure, Real temperature, Real & e, Real & de_dp, Real & de_dT) const;
 
-  /**
-   * Pressure from specific enthalpy and specific entropy
-   *
-   * @param[in] h   specific enthalpy
-   * @param[in] s   specific entropy
-   */
-  virtual Real p_from_h_s(Real h, Real s) const;
-
-  /**
-   * Pressure and its derivatives from specific enthalpy and specific entropy
-   *
-   * @param[in] h   specific enthalpy
-   * @param[in] s   specific entropy
-   */
-  virtual void p_from_h_s(Real h, Real s, Real & p, Real & dp_dh, Real & dp_ds) const;
-
-  /**
-   * Gibbs free energy from specific volume and specific internal energy
-   *
-   * @param[in] v   specific volume
-   * @param[in] e   specific internal energy
-   */
-  virtual Real g_from_v_e(Real v, Real e) const;
-
-  /**
-   * Thermal expansion coefficient from pressure and temperature
-   *
-   * @param[in] p   pressure (Pa)
-   * @param[in] T   temperature (K)
-   * @return beta (1/K)
-   */
-  virtual Real beta_from_p_T(Real p, Real T) const;
   virtual Real beta(Real pressure, Real temperature) const;
-
-  /**
-   * Partial pressure at saturation in a gas mixture
-   *
-   * @param[in] p   pressure (Pa)
-   * @param[in] T   temperature (K)
-   * @return pp_sat (Pa)
-   */
-  virtual Real pp_sat_from_p_T(Real p, Real T) const;
 
   /**
    * Temperature from pressure and specific enthalpy
@@ -528,6 +357,15 @@ public:
    * @param[out] de_dp derivative of internal energy wrt pressure
    * @param[out] de_dT derivative of internal energy wrt temperature
    */
+  virtual void rho_e_from_p_T(Real pressure,
+                              Real temperature,
+                              Real & rho,
+                              Real & drho_dp,
+                              Real & drho_dT,
+                              Real & e,
+                              Real & de_dp,
+                              Real & de_dT) const;
+
   virtual void rho_e_dpT(Real pressure,
                          Real temperature,
                          Real & rho,
@@ -537,30 +375,15 @@ public:
                          Real & de_dp,
                          Real & de_dT) const;
 
-  /**
-   * Speed of sound
-   * @param pressure fluid pressure (Pa)
-   * @param temperature fluid temperature (K)
-   * @return speed of sound (m/s)
-   */
-  virtual Real c_from_p_T(Real pressure, Real temperature) const;
   virtual Real c(Real pressure, Real temperature) const;
 
   /**
-   * Isobaric specific heat capacity
-   * @param pressure fluid pressure (Pa)
-   * @param temperature fluid temperature (K)
-   * @return cp (J/kg/K)
+   * Adiabatic index - ratio of specific heats
+   * @param v specific volume
+   * @param e specific internal energy
+   * @return gamma (-)
    */
-  virtual Real cp_from_p_T(Real pressure, Real temperature) const;
-
-  /**
-   * Isochoric specific heat
-   * @param pressure fluid pressure (Pa)
-   * @param temperature fluid temperature (K)
-   * @return cv (J/kg/K)
-   */
-  virtual Real cv_from_p_T(Real pressure, Real temperature) const;
+  virtual Real gamma_from_v_e(Real v, Real e) const;
 
   /**
    * Adiabatic index - ratio of specific heats
@@ -577,7 +400,6 @@ public:
    * @return viscosity (Pa.s)
    */
   virtual Real mu(Real pressure, Real temperature) const;
-  virtual Real mu_from_p_T(Real pressure, Real temperature) const;
 
   /**
    * Dynamic viscosity and its derivatives wrt pressure and temperature
@@ -589,26 +411,7 @@ public:
    */
   virtual void
   mu_dpT(Real pressure, Real temperature, Real & mu, Real & dmu_dp, Real & dmu_dT) const;
-  virtual void
-  mu_from_p_T(Real pressure, Real temperature, Real & mu, Real & dmu_dp, Real & dmu_dT) const;
 
-  /**
-   * Dynamic viscosity as a function of density and temperature
-   * @param density fluid density (kg/m^3)
-   * @param temperature fluid temperature (K)
-   * @return viscosity (Pa.s)
-   */
-  virtual Real mu_from_rho_T(Real density, Real temperature) const;
-
-  /**
-   * Dynamic viscosity and its derivatives wrt density and temperature
-   * @param density fluid density (kg/m^3)
-   * @param temperature fluid temperature (K)
-   * @param ddensity_dT derivative of density wrt temperature
-   * @param[out] mu viscosity (Pa.s)
-   * @param[out] dmu_drho derivative of viscosity wrt density
-   * @param[out] dmu_dT derivative of viscosity wrt temperature
-   */
   virtual void mu_drhoT_from_rho_T(Real density,
                                    Real temperature,
                                    Real ddensity_dT,
@@ -624,6 +427,7 @@ public:
    * @param[out] mu viscosity (Pa.s)
    */
   virtual void rho_mu(Real pressure, Real temperature, Real & rho, Real & mu) const;
+  virtual void rho_mu_from_p_T(Real pressure, Real temperature, Real & rho, Real & mu) const;
 
   /**
    * Density and viscosity and their derivatives wrt pressure and temperature
@@ -636,6 +440,15 @@ public:
    * @param[out] dmu_dp derivative of viscosity wrt pressure
    * @param[out] dmu_dT derivative of viscosity wrt temperature
    */
+  virtual void rho_mu_from_p_T(Real pressure,
+                               Real temperature,
+                               Real & rho,
+                               Real & drho_dp,
+                               Real & drho_dT,
+                               Real & mu,
+                               Real & dmu_dp,
+                               Real & dmu_dT) const;
+
   virtual void rho_mu_dpT(Real pressure,
                           Real temperature,
                           Real & rho,
@@ -650,7 +463,6 @@ public:
    * @param temperature fluid temperature (K)
    * @return thermal conductivity  (W/m/K)
    */
-  virtual Real k_from_p_T(Real pressure, Real temperature) const;
   virtual Real k(Real pressure, Real temperature) const;
 
   /**
@@ -661,17 +473,7 @@ public:
    * @param[out] derivative of thermal conductivity wrt pressure
    * @param[out] derivative of thermal conductivity wrt temperature
    */
-  virtual void
-  k_from_p_T(Real pressure, Real temperature, Real & k, Real & dk_dp, Real & dk_dT) const;
   virtual void k_dpT(Real pressure, Real temperature, Real & k, Real & dk_dp, Real & dk_dT) const;
-
-  /**
-   * Thermal conductivity as a function of density and temperature
-   * @param density fluid density (kg/m^3)
-   * @param temperature fluid temperature (K)
-   * @return thermal conductivity  (W/m/K)
-   */
-  virtual Real k_from_rho_T(Real density, Real temperature) const;
 
   /**
    * Henry's law constant for dissolution in water
@@ -686,6 +488,7 @@ public:
    * @param[out] Kh Henry's constant
    * @param[out] dKh_dT derivative of Kh wrt temperature
    */
+  virtual void henryConstant(Real temperature, Real & Kh, Real & dKh_dT) const;
   virtual void henryConstant_dT(Real temperature, Real & Kh, Real & dKh_dT) const;
 
   /**
@@ -707,6 +510,7 @@ public:
    * @param[out] saturation pressure (Pa)
    * @param[out] derivative of saturation pressure wrt temperature (Pa/K)
    */
+  virtual void vaporPressure(Real temperature, Real & psat, Real & dpsat_dT) const;
   virtual void vaporPressure_dT(Real temperature, Real & psat, Real & dpsat_dT) const;
 
 protected:
@@ -717,15 +521,23 @@ protected:
    * temperatures, IAPWS (2004)
    */
   virtual Real henryConstantIAPWS(Real temperature, Real A, Real B, Real C) const;
-
-  /// IAPWS formulation of Henry's law constant for dissolution in water and derivative wrt temperature
+  virtual void
+  henryConstantIAPWS(Real temperature, Real & Kh, Real & dKh_dT, Real A, Real B, Real C) const;
   virtual void
   henryConstantIAPWS_dT(Real temperature, Real & Kh, Real & dKh_dT, Real A, Real B, Real C) const;
 
   /// Universal gas constant (J/mol/K)
   const Real _R;
-  /// Conversion of temperature from Celsius to Kelvin
-  const Real _T_c2k;
+
+private:
+  template <typename... Args>
+  void fluidPropError(Args... args) const
+  {
+    if (_allow_imperfect_jacobians)
+      mooseWarning(std::forward<Args>(args)...);
+    else
+      mooseError(std::forward<Args>(args)...);
+  }
 };
 
 #endif /* SINGLEPHASEFLUIDPROPERTIES_H */

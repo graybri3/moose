@@ -14,6 +14,7 @@
 #include "MultiMooseEnum.h"
 #include "InputParameters.h"
 #include "ExecFlagEnum.h"
+#include "InfixIterator.h"
 
 #include "libmesh/elem.h"
 
@@ -39,6 +40,23 @@ std::string getLatestCheckpointFileHelper(const std::list<std::string> & checkpo
 
 namespace MooseUtils
 {
+
+std::string
+convertLatestCheckpoint(std::string orig, bool base_only)
+{
+  auto slash_pos = orig.find_last_of("/");
+  auto path = orig.substr(0, slash_pos);
+  auto file = orig.substr(slash_pos + 1);
+  if (file != "LATEST")
+    return orig;
+
+  auto converted = MooseUtils::getLatestAppCheckpointFileBase(MooseUtils::listDir(path));
+  if (!base_only)
+    converted = MooseUtils::getLatestMeshCheckpointFile(MooseUtils::listDir(path));
+  else if (converted.empty())
+    mooseError("Unable to find suitable recovery file!");
+  return converted;
+}
 
 // this implementation is copied from
 // https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Levenshtein_distance#C.2B.2B
@@ -179,6 +197,8 @@ parallelBarrierNotify(const Parallel::Communicator & comm, bool messaging)
 {
   processor_id_type slave_processor_id;
 
+  if (messaging)
+    Moose::out << "Waiting For Other Processors To Finish" << std::endl;
   if (comm.rank() == 0)
   {
     // The master process is already through, so report it
@@ -300,7 +320,7 @@ camelCaseToUnderscore(const std::string & camel_case_name)
 {
   string replaced = camel_case_name;
   // Put underscores in front of each contiguous set of capital letters
-  pcrecpp::RE("(?!^)(?<![A-Z])([A-Z]+)").GlobalReplace("_\\1", &replaced);
+  pcrecpp::RE("(?!^)(?<![A-Z_])([A-Z]+)").GlobalReplace("_\\1", &replaced);
 
   // Convert all capital letters to lower case
   std::transform(replaced.begin(), replaced.end(), replaced.begin(), ::tolower);
@@ -367,12 +387,6 @@ hostname()
 }
 
 bool
-absoluteFuzzyEqual(const Real & var1, const Real & var2, const Real & tol)
-{
-  return (std::abs(var1 - var2) <= tol);
-}
-
-bool
 absoluteFuzzyGreaterEqual(const Real & var1, const Real & var2, const Real & tol)
 {
   return (var1 >= (var2 - tol));
@@ -394,12 +408,6 @@ bool
 absoluteFuzzyLessThan(const Real & var1, const Real & var2, const Real & tol)
 {
   return (var1 < (var2 - tol));
-}
-
-bool
-relativeFuzzyEqual(const Real & var1, const Real & var2, const Real & tol)
-{
-  return (absoluteFuzzyEqual(var1, var2, tol * (std::abs(var1) + std::abs(var2))));
 }
 
 bool
@@ -724,6 +732,116 @@ stringToInteger(const std::string & input, bool throw_on_failure)
   return convert<int>(input, throw_on_failure);
 }
 
+void
+
+linearPartitionItems(dof_id_type num_items,
+                     dof_id_type num_chunks,
+                     dof_id_type chunk_id,
+                     dof_id_type & num_local_items,
+                     dof_id_type & local_items_begin,
+                     dof_id_type & local_items_end)
+{
+  auto global_num_local_items = num_items / num_chunks;
+
+  num_local_items = global_num_local_items;
+
+  auto leftovers = num_items % num_chunks;
+
+  if (chunk_id < leftovers)
+  {
+    num_local_items++;
+    local_items_begin = num_local_items * chunk_id;
+  }
+  else
+    local_items_begin =
+        (global_num_local_items + 1) * leftovers + global_num_local_items * (chunk_id - leftovers);
+
+  local_items_end = local_items_begin + num_local_items;
+}
+
+processor_id_type
+linearPartitionChunk(dof_id_type num_items, dof_id_type num_chunks, dof_id_type item_id)
+{
+  auto global_num_local_items = num_items / num_chunks;
+
+  auto leftovers = num_items % num_chunks;
+
+  auto first_item_past_first_part = leftovers * (global_num_local_items + 1);
+
+  // Is it in the first section (that gets an extra item)
+  if (item_id < first_item_past_first_part)
+    return item_id / (global_num_local_items + 1);
+  else
+  {
+    auto new_item_id = item_id - first_item_past_first_part;
+
+    // First chunk after the first section + the number of chunks after that
+    return leftovers + (new_item_id / global_num_local_items);
+  }
+}
+
+std::vector<std::string>
+split(const std::string & str, const std::string & delimiter)
+{
+  std::vector<std::string> output;
+  size_t prev = 0, pos = 0;
+  do
+  {
+    pos = str.find(delimiter, prev);
+    output.push_back(str.substr(prev, pos - prev));
+    prev = pos + delimiter.length();
+  } while (pos != string::npos);
+  return output;
+}
+
+template <typename T>
+std::string
+join(const T & strings, const std::string & delimiter)
+{
+  std::ostringstream oss;
+  std::copy(
+      strings.begin(), strings.end(), infix_ostream_iterator<std::string>(oss, delimiter.c_str()));
+  return oss.str();
+}
+template std::string join<std::vector<std::string>>(const std::vector<std::string> &,
+                                                    const std::string &);
+template std::string join<std::set<std::string>>(const std::set<std::string> &,
+                                                 const std::string &);
+template std::string join<std::vector<MooseEnumItem>>(const std::vector<MooseEnumItem> &,
+                                                      const std::string &);
+template std::string join<std::set<MooseEnumItem>>(const std::set<MooseEnumItem> &,
+                                                   const std::string &);
+
+void
+createSymlink(const std::string & target, const std::string & link)
+{
+  clearSymlink(link);
+  int err = symlink(target.c_str(), link.c_str());
+  if (err != 0)
+    mooseError("Failed to create symbolic link (via 'symlink') from ", target, " to ", link);
+}
+
+void
+clearSymlink(const std::string & link)
+{
+  struct stat sbuf;
+  if (lstat(link.c_str(), &sbuf) == 0)
+  {
+    int err = unlink(link.c_str());
+    if (err != 0)
+      mooseError("Failed to remove symbolic link (via 'unlink') to ", link);
+  }
+}
+
+std::size_t
+fileSize(const std::string & filename)
+{
+  struct stat buffer;
+  if (stat(filename.c_str(), &buffer))
+    return 0;
+
+  return buffer.st_size;
+}
 } // MooseUtils namespace
 
 std::string

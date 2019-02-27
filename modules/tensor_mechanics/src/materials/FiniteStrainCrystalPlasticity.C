@@ -146,7 +146,8 @@ FiniteStrainCrystalPlasticity::FiniteStrainCrystalPlasticity(const InputParamete
         "update_rot")), // Rotation tensor considering material rotation and crystal orientation
     _deformation_gradient(getMaterialProperty<RankTwoTensor>("deformation_gradient")),
     _deformation_gradient_old(getMaterialPropertyOld<RankTwoTensor>("deformation_gradient")),
-    _elasticity_tensor(getMaterialProperty<RankFourTensor>("elasticity_tensor")),
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name)),
     _crysrot(getMaterialProperty<RankTwoTensor>("crysrot")),
     _mo(_nss * LIBMESH_DIM),
     _no(_nss * LIBMESH_DIM),
@@ -189,15 +190,13 @@ FiniteStrainCrystalPlasticity::initQpStatefulProperties()
 {
   _stress[_qp].zero();
 
-  _fp[_qp].zero();
-  _fp[_qp].addIa(1.0);
+  _fp[_qp].setToIdentity();
 
   _pk2[_qp].zero();
   _acc_slip[_qp] = 0.0;
   _lag_e[_qp].zero();
 
-  _update_rot[_qp].zero();
-  _update_rot[_qp].addIa(1.0);
+  _update_rot[_qp].setToIdentity();
 
   initSlipSysProps(); // Initializes slip system related properties
   initAdditionalProps();
@@ -605,8 +604,7 @@ FiniteStrainCrystalPlasticity::postSolveQp()
 
     _Jacobian_mult[_qp] += calcTangentModuli(); // Calculate jacobian for preconditioner
 
-    RankTwoTensor iden;
-    iden.addIa(1.0);
+    RankTwoTensor iden(RankTwoTensor::initIdentity);
 
     _lag_e[_qp] = _deformation_gradient[_qp].transpose() * _deformation_gradient[_qp] - iden;
     _lag_e[_qp] = _lag_e[_qp] * 0.5;
@@ -889,10 +887,7 @@ FiniteStrainCrystalPlasticity::calc_resid_jacob(RankTwoTensor & resid, RankFourT
 void
 FiniteStrainCrystalPlasticity::calcResidual(RankTwoTensor & resid)
 {
-  RankTwoTensor iden, ce, ee, ce_pk2, eqv_slip_incr, pk2_new;
-
-  iden.zero();
-  iden.addIa(1.0);
+  RankTwoTensor iden(RankTwoTensor::initIdentity), ce, ee, ce_pk2, eqv_slip_incr, pk2_new;
 
   _fe = _dfgrd_tmp * _fp_prev_inv; // _fp_inv  ==> _fp_prev_inv
 

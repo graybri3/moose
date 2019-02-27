@@ -108,11 +108,6 @@
     type = PorousFlowPorosityConst
     porosity = 0.3
   [../]
-  [./massfrac_qp]
-     type = PorousFlowMassFraction
-     at_nodes = false
-     mass_fraction_vars = massfrac0
-  [../]
   [./diff]
     type = PorousFlowDiffusivityConst
     diffusion_coeff = '1 1'
@@ -149,6 +144,8 @@
 []
 
 [Outputs]
-  csv = true
-  execute_on = 'final'
+  [./out]
+    type = CSV
+    execute_on = final
+  [../]
 []

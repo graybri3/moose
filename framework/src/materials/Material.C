@@ -239,50 +239,39 @@ Material::computeProperties()
     _qp = 0;
     computeQpProperties();
 
-    if (_fe_problem.currentlyComputingJacobian() && _fe_problem.usingAD())
-    {
-      for (const auto & prop_id : _supplied_regular_prop_ids)
-        props[prop_id]->copyValueToDualNumber(0);
-      for (const auto & prop_id : _supplied_ad_prop_ids)
-        props[prop_id]->copyDualNumberToValue(0);
-    }
-
     // Now copy the values computed at qp 0 to all the other qps.
     for (const auto & prop_id : _supplied_regular_prop_ids)
     {
       auto nqp = _qrule->n_points();
       for (decltype(nqp) qp = 1; qp < nqp; ++qp)
-      {
         props[prop_id]->qpCopy(qp, props[prop_id], 0);
-        if (_fe_problem.currentlyComputingJacobian())
-          props[prop_id]->copyValueToDualNumber(qp);
-      }
     }
     for (const auto & prop_id : _supplied_ad_prop_ids)
     {
       auto nqp = _qrule->n_points();
       for (decltype(nqp) qp = 1; qp < nqp; ++qp)
-      {
         props[prop_id]->qpCopy(qp, props[prop_id], 0);
-        if (_fe_problem.currentlyComputingJacobian())
-          props[prop_id]->copyDualNumberToValue(qp);
-      }
     }
+    copyDualNumbersToValues();
   }
   else
   {
     for (_qp = 0; _qp < _qrule->n_points(); ++_qp)
-    {
       computeQpProperties();
-      if (_fe_problem.currentlyComputingJacobian() && _fe_problem.usingAD())
-      {
-        for (const auto & prop_id : _supplied_regular_prop_ids)
-          props[prop_id]->copyValueToDualNumber(_qp);
-        for (const auto & prop_id : _supplied_ad_prop_ids)
-          props[prop_id]->copyDualNumberToValue(_qp);
-      }
-    }
+    copyDualNumbersToValues();
   }
+}
+
+void
+Material::copyDualNumbersToValues()
+{
+  if (!_fe_problem.currentlyComputingJacobian() || !_fe_problem.usingADMatProps())
+    return;
+
+  MaterialProperties & props = _material_data->props();
+  for (_qp = 0; _qp < _qrule->n_points(); ++_qp)
+    for (const auto & prop_id : _supplied_ad_prop_ids)
+      props[prop_id]->copyDualNumberToValue(_qp);
 }
 
 void

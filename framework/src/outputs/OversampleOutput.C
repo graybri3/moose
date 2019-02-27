@@ -17,6 +17,7 @@
 #include "libmesh/distributed_mesh.h"
 #include "libmesh/equation_systems.h"
 #include "libmesh/mesh_function.h"
+#include "libmesh/explicit_system.h"
 
 template <>
 InputParameters
@@ -64,6 +65,12 @@ OversampleOutput::OversampleOutput(const InputParameters & parameters)
   // ** DEPRECATED SUPPORT **
   if (getParam<bool>("append_oversample"))
     _file_base += "_oversample";
+}
+
+void
+OversampleOutput::initialSetup()
+{
+  AdvancedOutput::initialSetup();
 
   // Creates and initializes the oversampled mesh
   initOversample();

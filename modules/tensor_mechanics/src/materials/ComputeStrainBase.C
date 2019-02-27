@@ -46,7 +46,7 @@ ComputeStrainBase::ComputeStrainBase(const InputParameters & parameters)
     _eigenstrains(_eigenstrain_names.size()),
     _global_strain(isParamValid("global_strain")
                        ? &getMaterialProperty<RankTwoTensor>(_base_name + "global_strain")
-                       : NULL),
+                       : nullptr),
     _volumetric_locking_correction(getParam<bool>("volumetric_locking_correction")),
     _current_elem_volume(_assembly.elemVolume())
 {
@@ -61,6 +61,12 @@ ComputeStrainBase::ComputeStrainBase(const InputParameters & parameters)
 
   if (getParam<bool>("use_displaced_mesh"))
     paramError("use_displaced_mesh", "The strain calculator needs to run on the undisplaced mesh.");
+
+  // Generate warning when volumetric locking correction is used with second order elements
+  if (_mesh.hasSecondOrderElements() && _volumetric_locking_correction)
+    mooseWarning("Volumteric locking correction is not required for second order elements. Using "
+                 "volumetric locking with second order elements could cause zigzag patterns in "
+                 "stresses and strains.");
 }
 
 void

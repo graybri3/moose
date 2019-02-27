@@ -9,7 +9,16 @@
 #* https://www.gnu.org/licenses/lgpl-2.1.html
 #pylint: enable=missing-docstring
 import re
-from base import NodeBase, Property
+import copy
+from base import NodeBase
+from MooseDocs.common import exceptions
+
+def parse_style(token):
+    """Helper for converting style entries into a dict."""
+    style = dict()
+    for match in re.finditer(r'(?P<key>\S+?)\s*:\s*(?P<value>.*?)(?:;|\Z)', token.get('style', '')):
+        style[match.group('key')] = match.group('value').strip()
+    return style
 
 def escape(text):
     """
@@ -39,133 +48,135 @@ def escape(text):
     regex = re.compile('|'.join(regex_list))
     return regex.sub(lambda match: conv[match.group()], text)
 
-class Enclosure(NodeBase):
+class LatexBase(NodeBase):
+    """Base class for Latex nodes."""
+    def __init__(self, *args, **kwargs):
+        string = kwargs.pop('string', None)
+        kwargs.setdefault('info', None)
+        NodeBase.__init__(self, *args, **kwargs)
+
+        if string is not None:
+            String(self, content=string, escape=kwargs.get('escape', True))
+
+    def copy(self):
+        """Creates copy of the Node"""
+        return copy.copy(self)
+
+class EnclosureBase(LatexBase):
     """
     Class for enclosing other nodes in characters, e.g. [], {}.
     """
-    PROPERTIES = [Property('enclose', ptype=tuple, required=True),
-                  Property('string', ptype=unicode)]
-
     def __init__(self, *args, **kwargs):
-        NodeBase.__init__(self, *args, **kwargs)
-        if self.string is not None:
-            String(self, content=self.string)
+        LatexBase.__init__(self, *args, **kwargs)
+
+        if self.get('enclose', None) is None:
+            raise exceptions.MooseDocsException("The 'enclose' property is required.")
 
     def write(self):
         """
-        Write LaTex as a string.
+        Write LaTeX as a string.
         """
-        out = self.enclose[0]
+        enclose = self.get('enclose')
+        out = enclose[0]
         for child in self.children:
             out += child.write()
-        out += self.enclose[1]
+        out += enclose[1]
         return out
 
-class Bracket(Enclosure):
+class Bracket(EnclosureBase):
     """
     Square bracket enclosure ([]).
     """
-    def __init__(self, *args, **kwargs):
-        Enclosure.__init__(self, *args, enclose=('[', ']'), **kwargs)
+    def __init__(self, parent=None, **kwargs):
+        EnclosureBase.__init__(self, 'Bracket', parent, enclose=('[', ']'), **kwargs)
 
-class Brace(Enclosure):
+class Brace(EnclosureBase):
     """
     Curly brace enclosure ({}).
     """
-    def __init__(self, *args, **kwargs):
-        Enclosure.__init__(self, *args, enclose=('{', '}'), **kwargs)
+    def __init__(self, parent=None, **kwargs):
+        EnclosureBase.__init__(self, 'Brace', parent, enclose=('{', '}'), **kwargs)
 
-class InlineMath(Enclosure):
+class InlineMath(EnclosureBase):
     """
     Math enclosure ($$).
     """
-    def __init__(self, *args, **kwargs):
-        Enclosure.__init__(self, *args, enclose=('$', '$'), **kwargs)
+    def __init__(self, parent=None, **kwargs):
+        EnclosureBase.__init__(self, 'InlineMath', parent, enclose=('$', '$'), **kwargs)
 
-class Command(NodeBase):
+class Command(LatexBase):
     """
     Typical zero or one argument command: \foo{bar}.
 
     If children do not exist then the braces are not included (e.g., \foo).
     """
-    PROPERTIES = [Property('string', ptype=unicode),
-                  Property('start', ptype=str, default=''),
-                  Property('end', ptype=str, default=''),
-                  Property('options', ptype=dict, default=dict())]
-
-    def __init__(self, parent, name, *args, **kwargs):
-        NodeBase.__init__(self, name=name, parent=parent, *args, **kwargs)
-        if self.string is not None:
-            String(self, content=self.string)
+    def __init__(self, parent, name, **kwargs):
+        kwargs.setdefault('start', u'')
+        kwargs.setdefault('end', u'')
+        kwargs.setdefault('args', [])
+        kwargs.setdefault('optional', False)
+        LatexBase.__init__(self, name, parent, **kwargs)
 
     def write(self):
-        out = self.start
+        optional = self.get('optional', False)
+        out = self.get('start')
         out += '\\%s' % self.name
+        for arg in self.get('args'):
+            out += arg.write()
         if self.children:
-            out += '{'
+            out += '[' if optional else '{'
             for child in self.children:
                 out += child.write()
-            out += '}'
-        out += self.end
+            out += ']' if optional else '}'
+        out += self.get('end')
         return out
 
-class CustomCommand(NodeBase):
-    """
-    Class for building up arbitrary commands.
-
-    Children should be Bracket or Brace objects to build up the command.
-    """
-    PROPERTIES = [Property('start', ptype=str, default=''),
-                  Property('end', ptype=str, default='')]
-
-    def write(self):
-        """
-        Write to LaTeX string.
-        """
-        out = self.start
-        out += '\\%s' % self.name
-        for child in self.children:
-            out += child.write()
-        out += self.end
-        return out
-
-class Environment(NodeBase):
+class Environment(LatexBase):
     """
     Class for LaTeX environment: \\begin{foo}...\\end{foo}
     """
-    PROPERTIES = [Property('string', ptype=unicode),
-                  Property('start', ptype=str, default='\n'),
-                  Property('end', ptype=str, default=''),
-                  Property('after_begin', ptype=str, default='\n'),
-                  Property('before_end', ptype=str, default='\n')]
-
-    def __init__(self, parent, name, *args, **kwargs):
-        NodeBase.__init__(self, name=name, parent=parent, *args, **kwargs)
-        if self.string is not None:
-            String(self, content=self.string)
+    def __init__(self, parent, name, **kwargs):
+        kwargs.setdefault('start', u'\n')
+        kwargs.setdefault('end', u'\n')
+        kwargs.setdefault('args', [])
+        kwargs.setdefault('after_begin', u'\n')
+        kwargs.setdefault('before_end', u'\n')
+        LatexBase.__init__(self, name, parent, **kwargs)
 
     def write(self):
         """
         Write to LaTeX string.
         """
-        out = '%s\\begin{%s}%s' % (self.start, self.name, self.after_begin)
+        out = '%s\\begin{%s}' % (self.get('start'), self.name)
+        for arg in self.get('args'):
+            out += arg.write()
+        out += self.get('after_begin')
         for child in self.children:
             out += child.write()
-        out += '%s\\end{%s}%s' % (self.before_end, self.name, self.end)
+        out += '%s\\end{%s}%s' % (self.get('before_end'), self.name, self.get('end'))
         return out
 
 class String(NodeBase):
     """
     A node for containing string content, the parent must always be a Tag.
     """
-    PROPERTIES = [Property('content', default=u'', ptype=unicode),
-                  Property('escape', default=True, ptype=bool)]
+    def __init__(self, parent=None, **kwargs):
+        kwargs.setdefault('content', u'')
+        kwargs.setdefault('escape', True)
+        NodeBase.__init__(self, 'String', parent, **kwargs)
 
     def write(self):
         """
         Write to LaTeX string.
         """
-        out = escape(self.content) if self.escape else self.content
+        out = escape(self.get('content')) if self.get('escape') else self.get('content')
         for child in self.children:
             out += child.write()
         return out
+
+def create_settings(*args, **kwargs):
+    """Creates token with key, value pairs settings application."""
+    args = list(args)
+    args += ["{}={}".format(k, v) for k, v in kwargs.iteritems()]
+    opt = Bracket(None, escape=False, string=u",".join(args))
+    return opt

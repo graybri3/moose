@@ -1,5 +1,14 @@
 # Mass lumping
 
+This page is part of a set of pages devoted to discussions of numerical stabilization in PorousFlow.  See:
+
+- [Numerical stabilization lead page](stabilization.md)
+- [Mass lumping](mass_lumping.md)
+- [Full upwinding](upwinding.md)
+- [Kuzmin-Turek stabilization](kt.md)
+- [Numerical diffusion](numerical_diffusion.md)
+- [A worked example of Kuzmin-Turek stabilization](kt_worked.md)
+
 Consider here just the fluid-flow equation, as the heat-energy equation is analogous.  The
 time-derivative term is discretised as
 
@@ -17,7 +26,7 @@ etc) are evaluated at each quadrature point.  However, in PorousFlow, everything
 derivative is evaluated at the nodes.  Specifically, $M^{\kappa}$ at a node depends only on the
 independent variables at that node.  It has been shown in many studies that this lumping is
 advantageous for mass conservation and reduces spurious oscillations of the pressure around sharp
-fronts [citep:celia1990].
+fronts [citep!celia1990].
 
 The cause of oscillations around sharp fronts, and how mass lumping removes the oscillations, can be
 illustrated through a simple example.

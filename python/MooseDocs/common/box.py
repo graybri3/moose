@@ -1,10 +1,16 @@
-"""
-Provides a function for creating boxed output for terminal printing.
-"""
-def box(content, title=None, line=None, width=None):
-    """
-    Tool for building unicode box around text, this is used for error reporting.
-    """
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+import mooseutils
+
+def box(content, title=None, line=None, width=None, color='RESET'):
+    """Tool for building unicode box around text, this is used for error reporting."""
+
     lines = content.split('\n')
     n_lines = len(max(lines, key=len))
     out = ''
@@ -28,4 +34,7 @@ def box(content, title=None, line=None, width=None):
             out += u'\n{0}{1:<{2}}{0}'.format(u'\u2502', x, n_lines)
         out += u'\n{}{}{}'.format(u'\u2514', u'\u2500'*n_lines, u'\u2518')
 
-    return out
+    if color is None:
+        return out
+
+    return mooseutils.colorText(out, color)

@@ -144,8 +144,20 @@
       type = TabulatedFluidProperties
       fp = co2sw
     []
+    [water]
+      type = Water97FluidProperties
+    []
+    [watertab]
+      type = TabulatedFluidProperties
+      fp = water
+      temperature_min = 273.15
+      temperature_max = 573.15
+      fluid_property_file = water_fluid_properties.csv
+      save_file = false
+    []
     [brine]
       type = BrineFluidProperties
+      water_fp = watertab
     []
   []
 []
@@ -156,7 +168,7 @@
     temperature = '45'
   []
   [brineco2]
-    type = PorousFlowFluidStateBrineCO2
+    type = PorousFlowFluidState
     gas_porepressure = 'pgas'
     z = 'zi'
     temperature_unit = Celsius

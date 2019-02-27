@@ -14,11 +14,13 @@
 
 #include "libmesh/variable.h"
 #include "libmesh/dof_map.h"
+#include "libmesh/system.h"
 
 MooseVariableBase::MooseVariableBase(unsigned int var_num,
                                      const FEType & fe_type,
                                      SystemBase & sys,
-                                     Moose::VarKindType var_kind)
+                                     Moose::VarKindType var_kind,
+                                     THREAD_ID tid)
   : _var_num(var_num),
     _fe_type(fe_type),
     _var_kind(var_kind),
@@ -28,7 +30,7 @@ MooseVariableBase::MooseVariableBase(unsigned int var_num,
     _dof_map(sys.dofMap()),
     _mesh(_subproblem.mesh()),
     _scaling_factor(1.0),
-    _computing_jacobian(false)
+    _tid(tid)
 {
 }
 

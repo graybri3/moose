@@ -11,15 +11,14 @@
 #define INPUTPARAMETERS_H
 
 // MOOSE includes
+#include "MooseUtils.h"
 #include "MooseError.h"
 #include "MooseTypes.h"
-#include "MooseUtils.h"
 #include "MultiMooseEnum.h"
 #include "ExecFlagEnum.h"
 #include "Conversion.h"
 
 #include "libmesh/parameters.h"
-#include "libmesh/parsed_function.h"
 
 #ifdef LIBMESH_HAVE_FPARSER
 #include "libmesh/fparser.hh"
@@ -416,7 +415,7 @@ public:
   /**
    * Declare the given parameters as controllable
    */
-  void declareControllable(const std::string & name);
+  void declareControllable(const std::string & name, std::set<ExecFlagType> execute_flags = {});
 
   /**
    * Marker a parameter that has been changed by the Control system (this is for output purposes)
@@ -427,6 +426,11 @@ public:
    * Returns a Boolean indicating whether the specified parameter is controllable
    */
   bool isControllable(const std::string & name);
+
+  /**
+   * Return the allowed execute flags for a controllable parameter
+   */
+  const std::set<ExecFlagType> & getControllableExecuteOnTypes(const std::string & name);
 
   /**
    * This method must be called from every base "Moose System" to create linkage with the Action
@@ -782,7 +786,6 @@ private:
     PostprocessorValue _default_postprocessor_val = 0;
     /// True if a parameters value was set by addParam, and not set again.
     bool _set_by_add_param = false;
-    bool _controllable = false;
     /// The reserved option names for a parameter
     std::set<std::string> _reserved_values;
     /// If non-empty, this parameter is deprecated.
@@ -793,6 +796,10 @@ private:
     std::string _param_fullpath;
     /// raw token text for a parameter - usually only set for filepath type params.
     std::string _raw_val;
+    /// True if the parameters is controllable
+    bool _controllable = false;
+    /// Controllable execute flag restriction
+    std::set<ExecFlagType> _controllable_flags;
   };
 
   Metadata & at(const std::string & param)

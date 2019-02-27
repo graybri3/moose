@@ -15,12 +15,11 @@
 #include "DataIO.h"
 #include "MooseTypes.h"
 #include "VariableWarehouse.h"
+#include "InputParameters.h"
 
 // libMesh
 #include "libmesh/exodusII_io.h"
 #include "libmesh/parallel_object.h"
-#include "libmesh/dof_map.h"
-#include "libmesh/equation_systems.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/sparse_matrix.h"
 
@@ -35,11 +34,14 @@ typedef MooseVariableFE<VectorValue<Real>> VectorMooseVariable;
 class MooseMesh;
 class SubProblem;
 class SystemBase;
+class TimeIntegrator;
 
 // libMesh forward declarations
 namespace libMesh
 {
 class System;
+class DofMap;
+class FEType;
 }
 
 /**
@@ -154,7 +156,11 @@ public:
   virtual NumericVector<Number> * solutionPreviousNewton() = 0;
 
   virtual Number & duDotDu() { return _du_dot_du; }
-  virtual NumericVector<Number> & solutionUDot() { return *_dummy_vec; }
+  virtual Number & duDotDotDu() { return _du_dotdot_du; }
+  virtual NumericVector<Number> * solutionUDot() = 0;
+  virtual NumericVector<Number> * solutionUDotOld() = 0;
+  virtual NumericVector<Number> * solutionUDotDot() = 0;
+  virtual NumericVector<Number> * solutionUDotDotOld() = 0;
 
   virtual void saveOldSolutions();
   virtual void restoreOldSolutions();
@@ -407,6 +413,23 @@ public:
   size_t getMaxVarNDofsPerElem() { return _max_var_n_dofs_per_elem; }
 
   /**
+   * Gets the maximum number of dofs used by any one variable on any one node
+   *
+   * @return The max
+   */
+  size_t getMaxVarNDofsPerNode() { return _max_var_n_dofs_per_node; }
+
+  /**
+   * assign the maximum element dofs
+   */
+  void assignMaxVarNDofsPerElem(const size_t & max_dofs) { _max_var_n_dofs_per_elem = max_dofs; }
+
+  /**
+   * assign the maximum node dofs
+   */
+  void assignMaxVarNDofsPerNode(const size_t & max_dofs) { _max_var_n_dofs_per_node = max_dofs; }
+
+  /**
    * Adds this variable to the list of variables to be zeroed during each residual evaluation.
    * @param var_name The name of the variable to be zeroed.
    */
@@ -561,7 +584,7 @@ public:
   /**
    * Remove a vector from the system with the given name.
    */
-  virtual void removeVector(const std::string & name) { system().remove_vector(name); }
+  virtual void removeVector(const std::string & name);
 
   /**
    * Adds a solution length vector to the system.
@@ -631,7 +654,7 @@ public:
     mooseError("Removing a matrix is not supported for this type of system!");
   }
 
-  virtual const std::string & name() const { return system().name(); }
+  virtual const std::string & name() const;
 
   /**
    * Adds a scalar variable
@@ -644,9 +667,9 @@ public:
                                  Real scale_factor,
                                  const std::set<SubdomainID> * const active_subdomains = NULL);
 
-  const std::vector<VariableName> & getVariableNames() const { return _vars[0].names(); };
+  const std::vector<VariableName> & getVariableNames() const { return _vars[0].names(); }
 
-  virtual void computeVariables(const NumericVector<Number> & /*soln*/){};
+  virtual void computeVariables(const NumericVector<Number> & /*soln*/) {}
 
   void copyVars(ExodusII_IO & io);
 
@@ -654,6 +677,18 @@ public:
    * Copy current solution into old and older
    */
   virtual void copySolutionsBackwards();
+
+  virtual void addTimeIntegrator(const std::string & /*type*/,
+                                 const std::string & /*name*/,
+                                 InputParameters /*parameters*/)
+  {
+  }
+
+  virtual void addTimeIntegrator(std::shared_ptr<TimeIntegrator> /*ti*/) {}
+
+  TimeIntegrator * getTimeIntegrator() { return _time_integrator.get(); }
+
+  std::shared_ptr<TimeIntegrator> getSharedTimeIntegrator() { return _time_integrator; }
 
 protected:
   SubProblem & _subproblem;
@@ -674,6 +709,7 @@ protected:
   std::vector<std::string> _vars_to_be_zeroed_on_jacobian;
 
   Real _du_dot_du;
+  Real _du_dotdot_du;
 
   /// Tagged vectors (pointer)
   std::vector<NumericVector<Number> *> _tagged_vectors;
@@ -682,11 +718,13 @@ protected:
   /// Active flags for tagged matrices
   std::vector<bool> _matrix_tag_active_flags;
 
-  NumericVector<Number> * _dummy_vec; // to satisfy the interface
-
   // Used for saving old solutions so that they wont be accidentally changed
   NumericVector<Real> * _saved_old;
   NumericVector<Real> * _saved_older;
+
+  // Used for saving old u_dot and u_dotdot so that they wont be accidentally changed
+  NumericVector<Real> * _saved_dot_old;
+  NumericVector<Real> * _saved_dotdot_old;
 
   /// default kind of variables in this system
   Moose::VarKindType _var_kind;
@@ -695,6 +733,12 @@ protected:
 
   /// Maximum number of dofs for any one variable on any one element
   size_t _max_var_n_dofs_per_elem;
+
+  /// Maximum number of dofs for any one variable on any one node
+  size_t _max_var_n_dofs_per_node;
+
+  /// Time integrator
+  std::shared_ptr<TimeIntegrator> _time_integrator;
 };
 
 #define PARALLEL_TRY

@@ -23,49 +23,23 @@
   file = elastic_patch_rspherical.e
 []
 
-[Functions]
-  [./ur]
-    type = ParsedFunction
-    value = '3e-3*x'
-  [../]
-[]
-
 [Variables]
-  [./disp_x]
-  [../]
-
   [./temp]
-    initial_condition = 100.0
-  [../]
-[]
-
-[AuxVariables]
-  [./density]
-    order = CONSTANT
-    family = MONOMIAL
+    initial_condition = 117.56
   [../]
 []
 
 [Modules/TensorMechanics/Master/All]
   strain = SMALL
   incremental = true
-  eigenstrain_names = eigenstrain
   add_variables = true
   generate_output = 'stress_xx stress_yy stress_zz'
 []
 
 [Kernels]
   [./heat]
-    type = HeatConduction
+    type = TimeDerivative
     variable = temp
-  [../]
-[]
-
-[AuxKernels]
-  [./density]
-    type = MaterialRealAux
-    property = density
-    variable = density
   [../]
 []
 
@@ -74,14 +48,7 @@
     type = FunctionDirichletBC
     variable = disp_x
     boundary = '1 2'
-    function = ur
-  [../]
-
-  [./temp]
-    type = DirichletBC
-    variable = temp
-    boundary = 1
-    value = 117.56
+    function = '3e-3*x'
   [../]
 []
 
@@ -91,25 +58,14 @@
     youngs_modulus = 1e6
     poissons_ratio = 0.25
   [../]
-  [./thermal_strain]
-    type = ComputeThermalExpansionEigenstrain
-    stress_free_temperature = 117.56
-    thermal_expansion_coeff = 0.0
-    eigenstrain_name = eigenstrain
-  [../]
   [./stress]
     type = ComputeStrainIncrementBasedStress
-  [../]
-
-  [./heat]
-    type = HeatConductionMaterial
-    specific_heat = 0.116
-    thermal_conductivity = 4.85e-4
   [../]
 
   [./density]
     type = Density
     density = 0.283
+    outputs = all
   [../]
 []
 
@@ -117,7 +73,6 @@
   type = Transient
   solve_type = 'PJFNK'
 
-  start_time = 0.0
   end_time = 1.0
 []
 

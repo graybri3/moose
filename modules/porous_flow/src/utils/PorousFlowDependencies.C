@@ -55,6 +55,21 @@ PorousFlowDependencies::PorousFlowDependencies()
   _deps.insertDependency("PorousFlowPropertyAux", "chemistry_qp");
   _deps.insertDependency("PorousFlowPropertyAux", "mineral_qp");
 
+  // BC dependencies
+  _deps.insertDependency("PorousFlowHalfCubicSink", "PorousFlowSink");
+  _deps.insertDependency("PorousFlowHalfGaussianSink", "PorousFlowSink");
+  _deps.insertDependency("PorousFlowPiecewiseLinearSink", "PorousFlowSink");
+
+  _deps.insertDependency("PorousFlowSink", "pressure_saturation_nodal");
+  _deps.insertDependency("PorousFlowSink", "temperature_nodal");
+  _deps.insertDependency("PorousFlowSink", "mass_fraction_nodal");
+  _deps.insertDependency("PorousFlowSink", "fluid_properties_nodal");
+  _deps.insertDependency("PorousFlowSink", "relative_permeability_nodal");
+  _deps.insertDependency("PorousFlowSink", "enthalpy_nodal");
+  _deps.insertDependency("PorousFlowSink", "internal_energy_nodal");
+  _deps.insertDependency("PorousFlowSink", "permeability_qp");
+  _deps.insertDependency("PorousFlowSink", "thermal_conductivity_qp");
+
   // Kernel dependencies
   _deps.insertDependency("PorousFlowAdvectiveFlux", "PorousFlowDarcyBase");
   _deps.insertDependency("PorousFlowAdvectiveFlux", "mass_fraction_nodal");
@@ -238,4 +253,38 @@ PorousFlowDependencies::PorousFlowDependencies()
   _deps.insertDependency("porosity_qp", "pressure_saturation_qp");
   _deps.insertDependency("porosity_qp", "temperature_qp");
   //_deps.insertDependency("porosity_qp", "volumetric_strain_qp");
+
+  // UserObject dependencies
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorBase", "permeability_qp");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorBase", "pressure_saturation_qp");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorBase", "density_qp");
+
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorSaturated",
+                         "PorousFlowAdvectiveFluxCalculatorBase");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorSaturated", "density_nodal");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorSaturated", "viscosity_nodal");
+
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorSaturatedMultiComponent",
+                         "PorousFlowAdvectiveFluxCalculatorSaturated");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorSaturatedMultiComponent",
+                         "mass_fraction_nodal");
+
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorUnsaturated",
+                         "PorousFlowAdvectiveFluxCalculatorSaturated");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorUnsaturated",
+                         "relative_permeability_nodal");
+
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorUnsaturatedMultiComponent",
+                         "PorousFlowAdvectiveFluxCalculatorSaturatedMultiComponent");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorUnsaturatedMultiComponent",
+                         "relative_permeability_nodal");
+
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorSaturatedHeat",
+                         "PorousFlowAdvectiveFluxCalculatorSaturated");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorSaturatedHeat", "enthalpy_nodal");
+
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorUnsaturatedHeat",
+                         "PorousFlowAdvectiveFluxCalculatorSaturatedHeat");
+  _deps.insertDependency("PorousFlowAdvectiveFluxCalculatorUnsaturatedHeat",
+                         "relative_permeability_nodal");
 }

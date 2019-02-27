@@ -37,7 +37,10 @@ AuxiliarySystem::AuxiliarySystem(FEProblemBase & subproblem, const std::string &
     _current_solution(NULL),
     _serialized_solution(*NumericVector<Number>::build(_fe_problem.comm()).release()),
     _solution_previous_nl(NULL),
-    _u_dot(addVector("u_dot", true, GHOSTED)),
+    _u_dot(NULL),
+    _u_dotdot(NULL),
+    _u_dot_old(NULL),
+    _u_dotdot_old(NULL),
     _need_serialized_solution(false),
     _aux_scalar_storage(_app.getExecuteOnEnum()),
     _nodal_aux_storage(_app.getExecuteOnEnum()),
@@ -55,6 +58,19 @@ AuxiliarySystem::~AuxiliarySystem() { delete &_serialized_solution; }
 void
 AuxiliarySystem::init()
 {
+}
+
+void
+AuxiliarySystem::addDotVectors()
+{
+  if (_fe_problem.uDotRequested())
+    _u_dot = &addVector("u_dot", true, GHOSTED);
+  if (_fe_problem.uDotDotRequested())
+    _u_dotdot = &addVector("u_dotdot", true, GHOSTED);
+  if (_fe_problem.uDotOldRequested())
+    _u_dot_old = &addVector("u_dot_old", true, GHOSTED);
+  if (_fe_problem.uDotDotOldRequested())
+    _u_dotdot_old = &addVector("u_dotdot_old", true, GHOSTED);
 }
 
 void
@@ -231,12 +247,6 @@ AuxiliarySystem::reinitElemFace(const Elem * /*elem*/,
 }
 
 NumericVector<Number> &
-AuxiliarySystem::solutionUDot()
-{
-  return _u_dot;
-}
-
-NumericVector<Number> &
 AuxiliarySystem::serializedSolution()
 {
   _need_serialized_solution = true;
@@ -375,8 +385,38 @@ AuxiliarySystem::addVector(const std::string & vector_name,
 }
 
 void
+AuxiliarySystem::setScalarVariableCoupleableTags(ExecFlagType type)
+{
+  const MooseObjectWarehouse<AuxScalarKernel> & storage = _aux_scalar_storage[type];
+  const std::vector<std::shared_ptr<AuxScalarKernel>> & objects = storage.getActiveObjects(0);
+
+  std::set<TagID> needed_sc_var_matrix_tags;
+  std::set<TagID> needed_sc_var_vector_tags;
+  for (const auto & obj : objects)
+  {
+    auto & sc_var_coup_vtags = obj->getScalarVariableCoupleableVectorTags();
+    needed_sc_var_vector_tags.insert(sc_var_coup_vtags.begin(), sc_var_coup_vtags.end());
+
+    auto & sc_var_coup_mtags = obj->getScalarVariableCoupleableMatrixTags();
+    needed_sc_var_matrix_tags.insert(sc_var_coup_mtags.begin(), sc_var_coup_mtags.end());
+  }
+
+  _fe_problem.setActiveScalarVariableCoupleableMatrixTags(needed_sc_var_matrix_tags, 0);
+  _fe_problem.setActiveScalarVariableCoupleableVectorTags(needed_sc_var_vector_tags, 0);
+}
+
+void
+AuxiliarySystem::clearScalarVariableCoupleableTags()
+{
+  _fe_problem.clearActiveScalarVariableCoupleableMatrixTags(0);
+  _fe_problem.clearActiveScalarVariableCoupleableVectorTags(0);
+}
+
+void
 AuxiliarySystem::computeScalarVars(ExecFlagType type)
 {
+  setScalarVariableCoupleableTags(type);
+
   // Reference to the current storage container
   const MooseObjectWarehouse<AuxScalarKernel> & storage = _aux_scalar_storage[type];
 
@@ -408,6 +448,8 @@ AuxiliarySystem::computeScalarVars(ExecFlagType type)
     solution().close();
     _sys.update();
   }
+
+  clearScalarVariableCoupleableTags();
 }
 
 void

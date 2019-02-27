@@ -41,7 +41,7 @@ ElementIndicator::ElementIndicator(const InputParameters & parameters)
     MooseVariableInterface<Real>(this,
                                  false,
                                  "variable",
-                                 Moose::VarKindType::VAR_NONLINEAR,
+                                 Moose::VarKindType::VAR_ANY,
                                  Moose::VarFieldType::VAR_FIELD_STANDARD),
     _field_var(_subproblem.getStandardVariable(_tid, name())),
 
@@ -55,9 +55,7 @@ ElementIndicator::ElementIndicator(const InputParameters & parameters)
     _var(_subproblem.getStandardVariable(_tid, parameters.get<VariableName>("variable"))),
 
     _u(_var.sln()),
-    _grad_u(_var.gradSln()),
-    _u_dot(_var.uDot()),
-    _du_dot_du(_var.duDotDu())
+    _grad_u(_var.gradSln())
 {
   const std::vector<MooseVariableFEBase *> & coupled_vars = getCoupledMooseVars();
   for (const auto & var : coupled_vars)

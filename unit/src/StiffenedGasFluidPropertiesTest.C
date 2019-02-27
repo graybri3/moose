@@ -37,7 +37,7 @@ TEST_F(StiffenedGasFluidPropertiesTest, testAll)
   DERIV_TEST(_fp->p_from_h_s, h, s, REL_TOL_DERIVATIVE);
 
   REL_TEST(_fp->rho_from_p_s(p, s), rho, REL_TOL_CONSISTENCY);
-  DERIV_TEST(_fp->rho_from_p_s, p, s, REL_TOL_DERIVATIVE);
+  DERIV_TEST(_fp->rho_from_p_s, p, s, 1e-5);
 
   REL_TEST(_fp->p_from_v_e(v, e), p, REL_TOL_CONSISTENCY);
   DERIV_TEST(_fp->p_from_v_e, v, e, REL_TOL_DERIVATIVE);
@@ -47,6 +47,7 @@ TEST_F(StiffenedGasFluidPropertiesTest, testAll)
 
   REL_TEST(_fp->c_from_v_e(v, e), 1.299581997797754e3, REL_TOL_SAVED_VALUE);
   REL_TEST(_fp->cp_from_v_e(v, e), 4267.6, REL_TOL_SAVED_VALUE);
+  DERIV_TEST(_fp->cp_from_v_e, v, e, REL_TOL_DERIVATIVE);
   REL_TEST(_fp->cv_from_v_e(v, e), 1816, REL_TOL_SAVED_VALUE);
   REL_TEST(_fp->mu_from_v_e(v, e), 0.001, 1e-15);
   REL_TEST(_fp->k_from_v_e(v, e), 0.6, 1e-15);
@@ -65,7 +66,7 @@ TEST_F(StiffenedGasFluidPropertiesTest, testAll)
   ABS_TEST(_fp->e_from_p_rho(p, rho), 8.397412646416598e4, REL_TOL_SAVED_VALUE);
   DERIV_TEST(_fp->e_from_p_rho, p, rho, REL_TOL_DERIVATIVE);
 
-  ABS_TEST(_fp->h_from_p_T(p, T), 8.404693999999994e4, REL_TOL_SAVED_VALUE);
+  ABS_TEST(_fp->h_from_p_T(p, T), 8.404693999999994e4, 1e-10);
   DERIV_TEST(_fp->h_from_p_T, p, T, REL_TOL_DERIVATIVE);
 
   ABS_TEST(_fp->s_from_p_T(p, T), -2.6562518076298216e4, 4 * REL_TOL_SAVED_VALUE);
@@ -73,8 +74,18 @@ TEST_F(StiffenedGasFluidPropertiesTest, testAll)
   ABS_TEST(_fp->s_from_h_p(h, p), -2.6562518076298216e4, REL_TOL_SAVED_VALUE);
   DERIV_TEST(_fp->s_from_h_p, h, p, 1e-5);
 
-  ABS_TEST(_fp->e_from_p_T(p, T), 8.397412646416575e4, REL_TOL_SAVED_VALUE);
+  ABS_TEST(_fp->e_from_p_T(p, T), 8.397412646416575e4, 1e-10);
   DERIV_TEST(_fp->e_from_p_T, p, T, REL_TOL_DERIVATIVE);
 
   REL_TEST(_fp->T_from_p_h(p, h), T, REL_TOL_CONSISTENCY);
+
+  REL_TEST(_fp->mu_from_p_T(p, T), 0.001, REL_TOL_CONSISTENCY);
+  DERIV_TEST(_fp->mu_from_p_T, p, T, REL_TOL_DERIVATIVE);
+
+  REL_TEST(_fp->k_from_p_T(p, T), 0.6, REL_TOL_CONSISTENCY);
+  DERIV_TEST(_fp->k_from_p_T, p, T, REL_TOL_DERIVATIVE);
+
+  REL_TEST(_fp->cv_from_p_T(p, T), 1816, REL_TOL_SAVED_VALUE);
+  REL_TEST(_fp->cp_from_p_T(p, T), 4267.6, REL_TOL_SAVED_VALUE);
+  DERIV_TEST(_fp->cp_from_p_T, p, T, REL_TOL_DERIVATIVE);
 }
