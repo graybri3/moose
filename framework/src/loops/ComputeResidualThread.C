@@ -13,7 +13,7 @@
 #include "FEProblem.h"
 #include "KernelBase.h"
 #include "IntegratedBCBase.h"
-#include "DGKernel.h"
+#include "DGKernelBase.h"
 #include "InterfaceKernel.h"
 #include "Material.h"
 #include "TimeKernel.h"
@@ -76,17 +76,29 @@ ComputeResidualThread::subdomainChanged()
   // If users pass a empty vector or a full size of vector,
   // we take all kernels
   if (!_tags.size() || _tags.size() == _fe_problem.numVectorTags())
+  {
     _tag_kernels = &_kernels;
+    _dg_warehouse = &_dg_kernels;
+    _ibc_warehouse = &_integrated_bcs;
+    _ik_warehouse = &_interface_kernels;
+  }
   // If we have one tag only,
   // We call tag based storage
   else if (_tags.size() == 1)
+  {
     _tag_kernels = &(_kernels.getVectorTagObjectWarehouse(*(_tags.begin()), _tid));
+    _dg_warehouse = &(_dg_kernels.getVectorTagObjectWarehouse(*(_tags.begin()), _tid));
+    _ibc_warehouse = &(_integrated_bcs.getVectorTagObjectWarehouse(*(_tags.begin()), _tid));
+    _ik_warehouse = &(_interface_kernels.getVectorTagObjectWarehouse(*(_tags.begin()), _tid));
+  }
   // This one may be expensive
   else
+  {
     _tag_kernels = &(_kernels.getVectorTagsObjectWarehouse(_tags, _tid));
-
-  for (auto & var : needed_moose_vars)
-    var->computingJacobian(false);
+    _dg_warehouse = &(_dg_kernels.getVectorTagsObjectWarehouse(_tags, _tid));
+    _ibc_warehouse = &(_integrated_bcs.getVectorTagsObjectWarehouse(_tags, _tid));
+    _ik_warehouse = &(_interface_kernels.getVectorTagsObjectWarehouse(_tags, _tid));
+  }
 }
 
 void
@@ -112,9 +124,9 @@ ComputeResidualThread::onElement(const Elem * elem)
 void
 ComputeResidualThread::onBoundary(const Elem * elem, unsigned int side, BoundaryID bnd_id)
 {
-  if (_integrated_bcs.hasActiveBoundaryObjects(bnd_id, _tid))
+  if (_ibc_warehouse->hasActiveBoundaryObjects(bnd_id, _tid))
   {
-    const auto & bcs = _integrated_bcs.getActiveBoundaryObjects(bnd_id, _tid);
+    const auto & bcs = _ibc_warehouse->getActiveBoundaryObjects(bnd_id, _tid);
 
     _fe_problem.reinitElemFace(elem, side, bnd_id, _tid);
 
@@ -136,7 +148,7 @@ ComputeResidualThread::onBoundary(const Elem * elem, unsigned int side, Boundary
 void
 ComputeResidualThread::onInterface(const Elem * elem, unsigned int side, BoundaryID bnd_id)
 {
-  if (_interface_kernels.hasActiveBoundaryObjects(bnd_id, _tid))
+  if (_ik_warehouse->hasActiveBoundaryObjects(bnd_id, _tid))
   {
 
     // Pointer to the neighbor we are currently working on.
@@ -155,7 +167,7 @@ ComputeResidualThread::onInterface(const Elem * elem, unsigned int side, Boundar
       SwapBackSentinel neighbor_sentinel(_fe_problem, &FEProblem::swapBackMaterialsNeighbor, _tid);
       _fe_problem.reinitMaterialsNeighbor(neighbor->subdomain_id(), _tid);
 
-      const auto & int_ks = _interface_kernels.getActiveBoundaryObjects(bnd_id, _tid);
+      const auto & int_ks = _ik_warehouse->getActiveBoundaryObjects(bnd_id, _tid);
       for (const auto & interface_kernel : int_ks)
         interface_kernel->computeResidual();
 
@@ -170,7 +182,7 @@ ComputeResidualThread::onInterface(const Elem * elem, unsigned int side, Boundar
 void
 ComputeResidualThread::onInternalSide(const Elem * elem, unsigned int side)
 {
-  if (_dg_kernels.hasActiveBlockObjects(_subdomain, _tid))
+  if (_dg_warehouse->hasActiveBlockObjects(_subdomain, _tid))
   {
     // Pointer to the neighbor we are currently working on.
     const Elem * neighbor = elem->neighbor_ptr(side);
@@ -191,7 +203,7 @@ ComputeResidualThread::onInternalSide(const Elem * elem, unsigned int side)
       SwapBackSentinel neighbor_sentinel(_fe_problem, &FEProblem::swapBackMaterialsNeighbor, _tid);
       _fe_problem.reinitMaterialsNeighbor(neighbor->subdomain_id(), _tid);
 
-      const auto & dgks = _dg_kernels.getActiveBlockObjects(_subdomain, _tid);
+      const auto & dgks = _dg_warehouse->getActiveBlockObjects(_subdomain, _tid);
       for (const auto & dg_kernel : dgks)
         if (dg_kernel->hasBlocks(neighbor->subdomain_id()))
           dg_kernel->computeResidual();

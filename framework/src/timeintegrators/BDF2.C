@@ -42,26 +42,32 @@ BDF2::preStep()
 void
 BDF2::computeTimeDerivatives()
 {
+  if (!_sys.solutionUDot())
+    mooseError("BDF2: Time derivative of solution (`u_dot`) is not stored. Please set "
+               "uDotRequested() to true in FEProblemBase befor requesting `u_dot`.");
+
+  NumericVector<Number> & u_dot = *_sys.solutionUDot();
   if (_t_step == 1)
   {
-    _u_dot = *_solution;
-    _u_dot -= _solution_old;
-    _u_dot *= 1 / _dt;
-    _u_dot.close();
-
-    _du_dot_du = 1.0 / _dt;
+    u_dot = *_solution;
+    _du_dot_du = 1. / _dt;
   }
   else
   {
-    _u_dot.zero();
-    _u_dot.add(_weight[0], *_solution);
-    _u_dot.add(_weight[1], _solution_old);
-    _u_dot.add(_weight[2], _solution_older);
-    _u_dot.scale(1. / _dt);
-    _u_dot.close();
-
+    u_dot.zero();
     _du_dot_du = _weight[0] / _dt;
   }
+  computeTimeDerivativeHelper(u_dot, *_solution, _solution_old, _solution_older);
+  u_dot.close();
+}
+
+void
+BDF2::computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof)
+{
+  auto ad_sln = ad_u_dot;
+  if (_t_step != 1)
+    ad_u_dot = 0;
+  computeTimeDerivativeHelper(ad_u_dot, ad_sln, _solution_old(dof), _solution_older(dof));
 }
 
 void

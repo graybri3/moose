@@ -15,7 +15,6 @@
 #include "Action.h"
 #include "Factory.h"
 #include "MooseObjectAction.h"
-#include "MooseADObjectAction.h"
 #include "ActionWarehouse.h"
 #include "EmptyAction.h"
 #include "FEProblem.h"
@@ -36,6 +35,7 @@
 #include "MooseUtils.h"
 
 #include "libmesh/parallel.h"
+#include "libmesh/fparser.hh"
 
 // Regular expression includes
 #include "pcrecpp.h"
@@ -115,10 +115,11 @@ public:
       if (_duplicates.count(fullpath) == 0)
       {
         errors.push_back(
-            errormsg(_fname, existing, prefix, " '", fullpath, "' supplied multiple times"));
+            hit::errormsg(_fname, existing, prefix, " '", fullpath, "' supplied multiple times"));
         _duplicates.insert(fullpath);
       }
-      errors.push_back(errormsg(_fname, n, prefix, " '", fullpath, "' supplied multiple times"));
+      errors.push_back(
+          hit::errormsg(_fname, n, prefix, " '", fullpath, "' supplied multiple times"));
     }
     _have[n->fullpath()] = n;
   }
@@ -194,16 +195,16 @@ public:
       auto paramlist = _parser.listValidParams(section_name);
       auto candidates = findSimilar(nodename, paramlist);
       if (candidates.size() > 0)
-        errors.push_back(errormsg(_fname,
-                                  n,
-                                  "unused parameter '",
-                                  fullpath,
-                                  "'\n",
-                                  "      Did you mean '",
-                                  candidates[0],
-                                  "'?"));
+        errors.push_back(hit::errormsg(_fname,
+                                       n,
+                                       "unused parameter '",
+                                       fullpath,
+                                       "'\n",
+                                       "      Did you mean '",
+                                       candidates[0],
+                                       "'?"));
       else
-        errors.push_back(errormsg(_fname, n, "unused parameter '", fullpath, "'"));
+        errors.push_back(hit::errormsg(_fname, n, "unused parameter '", fullpath, "'"));
     }
   }
 
@@ -229,8 +230,8 @@ public:
     if (actives && inactives && actives->type() == hit::NodeType::Field &&
         inactives->type() == hit::NodeType::Field && actives->parent() == inactives->parent())
     {
-      errors.push_back(
-          errormsg(_fname, section, "'active' and 'inactive' parameters both provided in section"));
+      errors.push_back(hit::errormsg(
+          _fname, section, "'active' and 'inactive' parameters both provided in section"));
       return;
     }
 
@@ -247,13 +248,13 @@ public:
       if (msg.size() > 0)
       {
         msg = msg.substr(0, msg.size() - 2);
-        errors.push_back(errormsg(_fname,
-                                  section,
-                                  "variables listed as active (",
-                                  msg,
-                                  ") in section '",
-                                  section->fullpath(),
-                                  "' not found in input"));
+        errors.push_back(hit::errormsg(_fname,
+                                       section,
+                                       "variables listed as active (",
+                                       msg,
+                                       ") in section '",
+                                       section->fullpath(),
+                                       "' not found in input"));
       }
     }
     // ensures we don't recheck deeper nesting levels
@@ -269,13 +270,13 @@ public:
       if (msg.size() > 0)
       {
         msg = msg.substr(0, msg.size() - 2);
-        errors.push_back(errormsg(_fname,
-                                  section,
-                                  "variables listed as inactive (",
-                                  msg,
-                                  ") in section '",
-                                  section->fullpath(),
-                                  "' not found in input"));
+        errors.push_back(hit::errormsg(_fname,
+                                       section,
+                                       "variables listed as inactive (",
+                                       msg,
+                                       ") in section '",
+                                       section->fullpath(),
+                                       "' not found in input"));
       }
     }
   }
@@ -325,11 +326,12 @@ Parser::walkRaw(std::string /*fullpath*/, std::string /*nodepath*/, hit::Node * 
   auto iters = _syntax.getActions(registered_identifier);
   if (iters.first == iters.second)
   {
-    _errmsg += errormsg(getFileName(),
-                        n,
-                        "section '",
-                        curr_identifier,
-                        "' does not have an associated \"Action\".\nDid you misspell it?");
+    _errmsg += hit::errormsg(getFileName(),
+                             n,
+                             "section '",
+                             curr_identifier,
+                             "' does not have an associated \"Action\".\nDid you misspell it?") +
+               "\n";
     return;
   }
 
@@ -338,8 +340,8 @@ Parser::walkRaw(std::string /*fullpath*/, std::string /*nodepath*/, hit::Node * 
     if (is_parent)
       continue;
     if (_syntax.isDeprecatedSyntax(registered_identifier))
-      mooseDeprecated(
-          errormsg(getFileName(), n, _syntax.deprecatedActionSyntaxMessage(registered_identifier)));
+      mooseDeprecated(hit::errormsg(
+          getFileName(), n, _syntax.deprecatedActionSyntaxMessage(registered_identifier)));
 
     params = _action_factory.getValidParams(it->second._action);
 
@@ -372,21 +374,6 @@ Parser::walkRaw(std::string /*fullpath*/, std::string /*nodepath*/, hit::Node * 
       }
     }
 
-    {
-      // extract the MooseObject params if necessary
-      std::shared_ptr<MooseADObjectAction> object_action =
-          std::dynamic_pointer_cast<MooseADObjectAction>(action_obj);
-      if (object_action)
-      {
-        object_action->getObjectParams().blockLocation() = params.blockLocation();
-        object_action->getObjectParams().blockFullpath() = params.blockFullpath();
-        extractParams(curr_identifier, object_action->getObjectParams());
-        object_action->getObjectParams()
-            .set<std::vector<std::string>>("control_tags")
-            .push_back(MooseUtils::baseName(curr_identifier));
-      }
-    }
-
     // add it to the warehouse
     _action_wh.addActionBlock(action_obj);
   }
@@ -403,11 +390,11 @@ Parser::walk(const std::string & fullpath, const std::string & nodepath, hit::No
 }
 
 std::string
-Parser::hitCLIFilter(std::string appname, int argc, char * argv[])
+Parser::hitCLIFilter(std::string appname, const std::vector<std::string> & argv)
 {
   std::string hit_text;
   bool afterDoubleDash = false;
-  for (int i = 1; i < argc; i++)
+  for (std::size_t i = 1; i < argv.size(); i++)
   {
     std::string arg(argv[i]);
 
@@ -510,10 +497,7 @@ Parser::parse(const std::string & input_filename)
   try
   {
     _root.reset(hit::parse(_input_filename, input));
-
-    int argc = _app.commandLine()->argc();
-    char ** argv = _app.commandLine()->argv();
-    auto cli_input = hitCLIFilter(_app.name(), argc, argv);
+    auto cli_input = hitCLIFilter(_app.name(), _app.commandLine()->getArguments());
 
     _cli_root.reset(hit::parse("CLI_ARGS", cli_input));
     hit::explode(_cli_root.get());
@@ -527,7 +511,15 @@ Parser::parse(const std::string & input_filename)
 
   // expand ${bla} parameter values and mark/include variables used in expansions as "used".  This
   // MUST occur before parameter extraction - otherwise parameters will get wrong values.
-  ExpandWalker exw(_input_filename);
+  hit::RawEvaler raw;
+  hit::EnvEvaler env;
+  hit::ReplaceEvaler repl;
+  FuncParseEvaler fparse_ev;
+  hit::BraceExpander exw(_input_filename);
+  exw.registerEvaler("raw", raw);
+  exw.registerEvaler("env", env);
+  exw.registerEvaler("fparse", fparse_ev);
+  exw.registerEvaler("replace", repl);
   _root->walk(&exw);
   for (auto & var : exw.used)
     _extracted_vars.insert(var);
@@ -604,9 +596,12 @@ Parser::errorCheck(const Parallel::Communicator & comm, bool warn_unused, bool e
   if (warn_unused)
   {
     for (auto arg : cli->unused(comm))
-      _warnmsg +=
-          errormsg("CLI_ARG", nullptr, "unused command line parameter '", cli->argv()[arg], "'") +
-          "\n";
+      _warnmsg += hit::errormsg("CLI_ARG",
+                                nullptr,
+                                "unused command line parameter '",
+                                cli->getArguments()[arg],
+                                "'") +
+                  "\n";
     for (auto & msg : uwcli.errors)
       _warnmsg += msg + "\n";
     for (auto & msg : uw.errors)
@@ -615,9 +610,12 @@ Parser::errorCheck(const Parallel::Communicator & comm, bool warn_unused, bool e
   else if (err_unused)
   {
     for (auto arg : cli->unused(comm))
-      _errmsg +=
-          errormsg("CLI_ARG", nullptr, "unused command line parameter '", cli->argv()[arg], "'") +
-          "\n";
+      _errmsg += hit::errormsg("CLI_ARG",
+                               nullptr,
+                               "unused command line parameter '",
+                               cli->getArguments()[arg],
+                               "'") +
+                 "\n";
     for (auto & msg : uwcli.errors)
       _errmsg += msg + "\n";
     for (auto & msg : uw.errors)
@@ -1099,6 +1097,7 @@ Parser::extractParams(const std::string & prefix, InputParameters & p)
       setscalarvaltype(unsigned int, unsigned int, long);
       setscalarvaltype(unsigned long, unsigned int, long);
       setscalarvaltype(long int, int64_t, long);
+      setscalarvaltype(unsigned long long, unsigned int, long);
 
       setscalar(bool, bool);
       setscalar(SubdomainID, int);
@@ -1127,6 +1126,7 @@ Parser::extractParams(const std::string & prefix, InputParameters & p)
       setscalar(DistributionName, string);
       setscalar(SamplerName, string);
       setscalar(TagName, string);
+      setscalar(MeshGeneratorName, string);
 
       setscalar(PostprocessorName, PostprocessorName);
 
@@ -1183,12 +1183,14 @@ Parser::extractParams(const std::string & prefix, InputParameters & p)
       setvector(SamplerName, string);
       setvector(TagName, string);
       setvector(VariableName, VariableName);
+      setvector(MeshGeneratorName, string);
 
       // Double indexed types
       setvectorvector(Real);
       setvectorvector(int);
       setvectorvector(long);
       setvectorvector(unsigned int);
+      setvectorvector(unsigned long long);
 
 // See vector type explanation
 #if LIBMESH_DOF_ID_BYTES == 8
@@ -1308,14 +1310,14 @@ Parser::setScalarParameter(const std::string & full_name,
       catch (std::invalid_argument & /*e*/)
       {
         const std::string format_type = (t == typeid(double)) ? "float" : "integer";
-        _errmsg += errormsg(_input_filename,
-                            _root->find(full_name),
-                            "invalid ",
-                            format_type,
-                            " syntax for parameter: ",
-                            full_name,
-                            "=",
-                            strval) +
+        _errmsg += hit::errormsg(_input_filename,
+                                 _root->find(full_name),
+                                 "invalid ",
+                                 format_type,
+                                 " syntax for parameter: ",
+                                 full_name,
+                                 "=",
+                                 strval) +
                    "\n";
       }
     }
@@ -1323,12 +1325,12 @@ Parser::setScalarParameter(const std::string & full_name,
     {
       bool isbool = toBool(strval, param->set());
       if (!isbool)
-        _errmsg += errormsg(_input_filename,
-                            _root->find(full_name),
-                            "invalid boolean syntax for parameter: ",
-                            full_name,
-                            "=",
-                            strval) +
+        _errmsg += hit::errormsg(_input_filename,
+                                 _root->find(full_name),
+                                 "invalid boolean syntax for parameter: ",
+                                 full_name,
+                                 "=",
+                                 strval) +
                    "\n";
     }
     else
@@ -1403,7 +1405,7 @@ Parser::setVectorParameter(const std::string & full_name,
     }
     catch (hit::Error & err)
     {
-      _errmsg += errormsg(_input_filename, _root->find(full_name), err.what());
+      _errmsg += hit::errormsg(_input_filename, _root->find(full_name), err.what()) + "\n";
       return;
     }
   }
@@ -1477,8 +1479,10 @@ Parser::setDoubleIndexParameter(const std::string & full_name,
   for (unsigned j = 0; j < first_tokenized_vector.size(); ++j)
     if (!MooseUtils::tokenizeAndConvert<T>(first_tokenized_vector[j], param->set()[j]))
     {
-      _errmsg += errormsg(
-          _input_filename, _root->find(full_name), "invalid format for parameter ", full_name);
+      _errmsg +=
+          hit::errormsg(
+              _input_filename, _root->find(full_name), "invalid format for parameter ", full_name) +
+          "\n";
       return;
     }
 
@@ -1510,20 +1514,21 @@ Parser::setScalarComponentParameter(const std::string & full_name,
   }
   catch (hit::Error & err)
   {
-    _errmsg += errormsg(_input_filename, _root->find(full_name), err.what());
+    _errmsg += hit::errormsg(_input_filename, _root->find(full_name), err.what()) + "\n";
     return;
   }
 
   if (vec.size() != LIBMESH_DIM)
   {
-    _errmsg += errormsg(_input_filename,
-                        _root->find(full_name),
-                        "wrong number of values in scalar component parameter ",
-                        full_name,
-                        ": size ",
-                        vec.size(),
-                        " is not a multiple of ",
-                        LIBMESH_DIM);
+    _errmsg += hit::errormsg(_input_filename,
+                             _root->find(full_name),
+                             "wrong number of values in scalar component parameter ",
+                             full_name,
+                             ": size ",
+                             vec.size(),
+                             " is not a multiple of ",
+                             LIBMESH_DIM) +
+               "\n";
     return;
   }
 
@@ -1554,20 +1559,21 @@ Parser::setVectorComponentParameter(const std::string & full_name,
   }
   catch (hit::Error & err)
   {
-    _errmsg += errormsg(_input_filename, _root->find(full_name), err.what());
+    _errmsg += hit::errormsg(_input_filename, _root->find(full_name), err.what()) + "\n";
     return;
   }
 
   if (vec.size() % LIBMESH_DIM)
   {
-    _errmsg += errormsg(_input_filename,
-                        _root->find(full_name),
-                        "wrong number of values in vector component parameter ",
-                        full_name,
-                        ": size ",
-                        vec.size(),
-                        " is not a multiple of ",
-                        LIBMESH_DIM);
+    _errmsg += hit::errormsg(_input_filename,
+                             _root->find(full_name),
+                             "wrong number of values in vector component parameter ",
+                             full_name,
+                             ": size ",
+                             vec.size(),
+                             " is not a multiple of ",
+                             LIBMESH_DIM) +
+               "\n";
     return;
   }
 
@@ -1697,14 +1703,15 @@ Parser::setScalarParameter<RealTensorValue, RealTensorValue>(
   auto vec = _root->param<std::vector<double>>(full_name);
   if (vec.size() != LIBMESH_DIM * LIBMESH_DIM)
   {
-    _errmsg += errormsg(_input_filename,
-                        _root->find(full_name),
-                        "invalid RealTensorValue parameter ",
-                        full_name,
-                        ": size is ",
-                        vec.size(),
-                        " but should be ",
-                        LIBMESH_DIM * LIBMESH_DIM);
+    _errmsg += hit::errormsg(_input_filename,
+                             _root->find(full_name),
+                             "invalid RealTensorValue parameter ",
+                             full_name,
+                             ": size is ",
+                             vec.size(),
+                             " but should be ",
+                             LIBMESH_DIM * LIBMESH_DIM) +
+               "\n";
     return;
   }
 
@@ -1850,14 +1857,16 @@ Parser::setVectorParameter<VariableName, VariableName>(
     for (unsigned int i = 0; i < vec.size(); ++i)
       if (var_names[i] == "")
       {
-        _errmsg += errormsg(
-            _input_filename,
-            _root->find(full_name),
-            "invalid value for ",
-            full_name,
-            ":\n"
-            "    MOOSE does not currently support a coupled vector where some parameters are ",
-            "reals and others are variables");
+        _errmsg +=
+            hit::errormsg(
+                _input_filename,
+                _root->find(full_name),
+                "invalid value for ",
+                full_name,
+                ":\n"
+                "    MOOSE does not currently support a coupled vector where some parameters are ",
+                "reals and others are variables") +
+            "\n";
         return;
       }
       else

@@ -12,8 +12,14 @@
 
 #include "MooseVariableBase.h"
 
-#include "libmesh/dense_vector.h"
-#include "libmesh/numeric_vector.h"
+namespace libMesh
+{
+template <typename>
+class DenseVector;
+template <typename>
+class NumericVector;
+class Point;
+}
 
 class Assembly;
 
@@ -23,7 +29,8 @@ public:
   MooseVariableFEBase(unsigned int var_num,
                       const FEType & fe_type,
                       SystemBase & sys,
-                      Moose::VarKindType var_kind);
+                      Moose::VarKindType var_kind,
+                      THREAD_ID tid);
 
   /**
    * Clear out the dof indices.  We do this in case this variable is not going to be prepared at
@@ -69,13 +76,6 @@ public:
    */
   virtual bool activeOnSubdomain(SubdomainID subdomain) const = 0;
 
-  virtual const DenseVector<Number> & solutionDoFs() = 0;
-  virtual const DenseVector<Number> & solutionDoFsOld() = 0;
-  virtual const DenseVector<Number> & solutionDoFsOlder() = 0;
-  virtual const DenseVector<Number> & solutionDoFsNeighbor() = 0;
-  virtual const DenseVector<Number> & solutionDoFsOldNeighbor() = 0;
-  virtual const DenseVector<Number> & solutionDoFsOlderNeighbor() = 0;
-
   /**
    * Prepare the initial condition
    */
@@ -108,7 +108,7 @@ public:
   /**
    * Set values for this variable to keep everything up to date
    */
-  virtual void setNodalValue(const DenseVector<Number> & value) = 0;
+  virtual void setDofValues(const DenseVector<Number> & value) = 0;
   /**
    * Get the value of this variable at given node
    */
@@ -199,6 +199,30 @@ public:
    */
   virtual const MooseArray<Number> & dofValuesDotNeighbor() = 0;
   /**
+   * Returns second time derivative of degrees of freedom
+   */
+  virtual const MooseArray<Number> & dofValuesDotDot() = 0;
+  /**
+   * Returns second time derivative of neighboring degrees of freedom
+   */
+  virtual const MooseArray<Number> & dofValuesDotDotNeighbor() = 0;
+  /**
+   * Returns old time derivative of degrees of freedom
+   */
+  virtual const MooseArray<Number> & dofValuesDotOld() = 0;
+  /**
+   * Returns old time derivative of neighboring degrees of freedom
+   */
+  virtual const MooseArray<Number> & dofValuesDotOldNeighbor() = 0;
+  /**
+   * Returns old second time derivative of degrees of freedom
+   */
+  virtual const MooseArray<Number> & dofValuesDotDotOld() = 0;
+  /**
+   * Returns old second time derivative of neighboring degrees of freedom
+   */
+  virtual const MooseArray<Number> & dofValuesDotDotOldNeighbor() = 0;
+  /**
    * Returns derivative of time derivative of degrees of freedom
    */
   virtual const MooseArray<Number> & dofValuesDuDotDu() = 0;
@@ -206,6 +230,14 @@ public:
    * Returns derivative of time derivative of neighboring degrees of freedom
    */
   virtual const MooseArray<Number> & dofValuesDuDotDuNeighbor() = 0;
+  /**
+   * Returns derivative of second time derivative of degrees of freedom
+   */
+  virtual const MooseArray<Number> & dofValuesDuDotDotDu() = 0;
+  /**
+   * Returns derivative of second time derivative of neighboring degrees of freedom
+   */
+  virtual const MooseArray<Number> & dofValuesDuDotDotDuNeighbor() = 0;
 
   /**
    * Return phi size

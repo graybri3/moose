@@ -21,12 +21,15 @@ validParams<ODETimeKernel>()
   InputParameters params = validParams<ODEKernel>();
 
   params.set<MultiMooseEnum>("vector_tags") = "time";
-  params.set<MultiMooseEnum>("matrix_tags") = "system";
+  params.set<MultiMooseEnum>("matrix_tags") = "system time";
 
   return params;
 }
 
-ODETimeKernel::ODETimeKernel(const InputParameters & parameters) : ODEKernel(parameters) {}
+ODETimeKernel::ODETimeKernel(const InputParameters & parameters)
+  : ODEKernel(parameters), _u_dot(_var.uDot()), _du_dot_du(_var.duDotDu())
+{
+}
 
 void
 ODETimeKernel::computeResidual()

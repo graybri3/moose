@@ -41,6 +41,7 @@ const ExecFlagType EXEC_CUSTOM("CUSTOM", 0x100);                // 256
 const ExecFlagType EXEC_SUBDOMAIN("SUBDOMAIN", 0x200);          // 512
 const ExecFlagType EXEC_PRE_DISPLACE("PRE_DISPLACE");
 const ExecFlagType EXEC_SAME_AS_MULTIAPP("SAME_AS_MULTIAPP");
+const ExecFlagType EXEC_PRE_MULTIAPP_SETUP("PRE_MULTIAPP_SETUP");
 
 namespace Moose
 {
@@ -96,20 +97,20 @@ addActionTypes(Syntax & syntax)
   registerMooseObjectTask("determine_system_type",        Executioner,            true);
 
   registerMooseObjectTask("setup_mesh",                   MooseMesh,              false);
+  registerMooseObjectTask("set_mesh_base",                MooseMesh,              false);
   registerMooseObjectTask("init_mesh",                    MooseMesh,              false);
   registerMooseObjectTask("add_mesh_modifier",            MeshModifier,           false);
+  registerMooseObjectTask("add_mesh_generator",           MeshGenerator,          false);
 
   registerMooseObjectTask("add_kernel",                   Kernel,                 false);
   appendMooseObjectTask  ("add_kernel",                   EigenKernel);
   appendMooseObjectTask  ("add_kernel",                   VectorKernel);
 
-  registerMooseObjectTask("add_ad_kernel",                ADKernel,               false);
-
   registerMooseObjectTask("add_nodal_kernel",             NodalKernel,            false);
 
   registerMooseObjectTask("add_material",                 Material,               false);
-  registerMooseObjectTask("add_ad_material",              ADMaterial,             false);
   registerMooseObjectTask("add_bc",                       BoundaryCondition,      false);
+
   registerMooseObjectTask("add_function",                 Function,               false);
   registerMooseObjectTask("add_distribution",             Distribution,           false);
   registerMooseObjectTask("add_sampler",                  Sampler,                false);
@@ -165,10 +166,11 @@ addActionTypes(Syntax & syntax)
   registerTask("add_variable", false);
 
   registerTask("execute_mesh_modifiers", false);
+  registerTask("execute_mesh_generators", true);
   registerTask("uniform_refine_mesh", false);
   registerTask("prepare_mesh", false);
   registerTask("add_geometric_rm", true);
-  registerTask("setup_mesh_complete", false); // calls prepare
+  registerTask("setup_mesh_complete", true); // calls prepare
 
   registerTask("init_displaced_problem", false);
 
@@ -229,8 +231,11 @@ addActionTypes(Syntax & syntax)
                            "(common_output)"
                            "(set_global_params)"
                            "(setup_recover_file_base)"
-                           "(check_copy_nodal_vars)"
                            "(setup_mesh)"
+                           "(add_mesh_generator)"
+                           "(execute_mesh_generators)"
+                           "(set_mesh_base)"
+                           "(check_copy_nodal_vars)"
                            "(add_partitioner)"
                            "(add_geometric_rm)"
                            "(init_mesh)"
@@ -274,7 +279,7 @@ addActionTypes(Syntax & syntax)
                            "(add_multi_app)"
                            "(add_transfer)"
                            "(copy_nodal_vars, copy_nodal_aux_vars)"
-                           "(add_material, add_ad_material)"
+                           "(add_material)"
                            "(setup_material_output)" // DEPRECATED: Remove by 12/31/2018
                            "(add_output_aux_variables)"
                            "(add_algebraic_rm)"
@@ -285,7 +290,7 @@ addActionTypes(Syntax & syntax)
                            "(add_vector_postprocessor)" // MaterialVectorPostprocessor requires this
                                                         // to be after material objects are created.
                            "(add_aux_kernel, add_bc, add_damper, add_dirac_kernel, add_kernel,"
-                           " add_ad_kernel, add_nodal_kernel, add_dg_kernel, add_interface_kernel,"
+                           " add_nodal_kernel, add_dg_kernel, add_interface_kernel,"
                            " add_scalar_kernel, add_aux_scalar_kernel, add_indicator, add_marker)"
                            "(add_control)"
                            "(check_output)"
@@ -354,6 +359,7 @@ registerExecFlags(Factory & factory)
   registerExecFlag(EXEC_SUBDOMAIN);
   registerExecFlag(EXEC_PRE_DISPLACE);
   registerExecFlag(EXEC_SAME_AS_MULTIAPP);
+  registerExecFlag(EXEC_PRE_MULTIAPP_SETUP);
 }
 
 void
@@ -374,8 +380,6 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntaxTask("AddKernelAction", "AuxKernels/*", "add_aux_kernel");
   registerSyntaxTask("AddKernelAction", "Bounds/*", "add_aux_kernel");
 
-  registerSyntaxTask("AddADKernelAction", "ADKernels/*", "add_ad_kernel");
-
   registerSyntaxTask("AddScalarKernelAction", "ScalarKernels/*", "add_scalar_kernel");
   registerSyntaxTask("AddScalarKernelAction", "AuxScalarKernels/*", "add_aux_scalar_kernel");
 
@@ -389,6 +393,7 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   //  registerSyntaxTask("SetupMeshCompleteAction", "Mesh", "setup_mesh_complete");
   registerSyntax("CreateDisplacedProblemAction", "Mesh");
   registerSyntax("AddMeshModifierAction", "MeshModifiers/*");
+  registerSyntax("AddMeshGeneratorAction", "MeshGenerators/*");
   registerSyntax("AddMortarInterfaceAction", "Mesh/MortarInterfaces/*");
 
   registerSyntax("AddFunctionAction", "Functions/*");
@@ -425,7 +430,6 @@ associateSyntaxInner(Syntax & syntax, ActionFactory & /*action_factory*/)
   registerSyntaxTask("AddInitialConditionAction", "ICs/*", "add_ic");
 
   registerSyntax("AddMaterialAction", "Materials/*");
-  registerSyntaxTask("AddADMaterialAction", "ADMaterials/*", "add_ad_material");
 
   registerSyntax("SetupPostprocessorDataAction", "Postprocessors/*");
   registerSyntax("AddPostprocessorAction", "Postprocessors/*");

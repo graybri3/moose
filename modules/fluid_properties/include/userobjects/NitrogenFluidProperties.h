@@ -18,6 +18,9 @@ class NitrogenFluidProperties;
 template <>
 InputParameters validParams<NitrogenFluidProperties>();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+
 /**
  * Nitrogen (N2) fluid properties as a function of pressure (Pa)
  * and temperature (K).
@@ -44,17 +47,29 @@ public:
 
   virtual Real mu_from_rho_T(Real density, Real temperature) const override;
 
-  virtual void mu_drhoT_from_rho_T(Real density,
-                                   Real temperature,
-                                   Real ddensity_dT,
-                                   Real & mu,
-                                   Real & dmu_drho,
-                                   Real & dmu_dT) const override;
+  virtual void mu_from_rho_T(Real density,
+                             Real temperature,
+                             Real ddensity_dT,
+                             Real & mu,
+                             Real & dmu_drho,
+                             Real & dmu_dT) const override;
 
   virtual Real mu_from_p_T(Real pressure, Real temperature) const override;
 
   virtual void mu_from_p_T(
       Real pressure, Real temperature, Real & mu, Real & dmu_dp, Real & dmu_dT) const override;
+
+  virtual void
+  rho_mu_from_p_T(Real pressure, Real temperature, Real & rho, Real & mu) const override;
+
+  virtual void rho_mu_from_p_T(Real pressure,
+                               Real temperature,
+                               Real & rho,
+                               Real & drho_dp,
+                               Real & drho_dT,
+                               Real & mu,
+                               Real & dmu_dp,
+                               Real & dmu_dT) const override;
 
   virtual Real k_from_rho_T(Real density, Real temperature) const override;
 
@@ -65,7 +80,7 @@ public:
 
   virtual Real henryConstant(Real temperature) const override;
 
-  virtual void henryConstant_dT(Real temperature, Real & Kh, Real & dKh_dT) const override;
+  virtual void henryConstant(Real temperature, Real & Kh, Real & dKh_dT) const override;
 
   virtual Real criticalPressure() const override;
 
@@ -78,6 +93,8 @@ public:
   virtual Real triplePointTemperature() const override;
 
   virtual Real vaporPressure(Real temperature) const override;
+
+  virtual void vaporPressure(Real temperature, Real & psat, Real & dpsat_dT) const override;
 
   /**
    * Saturated liquid density of N2
@@ -190,5 +207,7 @@ protected:
   const std::array<unsigned int, 6> _lk{{0, 0, 1, 2, 2, 2}};
   const std::array<Real, 6> _gammak{{0.0, 0.0, 1.0, 1.0, 1.0}};
 };
+
+#pragma GCC diagnostic pop
 
 #endif /* NITROGENFLUIDPROPERTIES_H */

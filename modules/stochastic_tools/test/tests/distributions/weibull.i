@@ -15,6 +15,7 @@
     type = WeibullDistribution
     shape = 5
     scale = 1
+    location = 0
   [../]
 []
 

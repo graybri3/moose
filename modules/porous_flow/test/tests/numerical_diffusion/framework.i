@@ -87,7 +87,8 @@
 []
 
 [Outputs]
-  #exodus = true
-  csv = true
-  execute_on = final
+  [./out]
+    type = CSV
+    execute_on = final
+  [../]
 []

@@ -40,7 +40,7 @@
 [Postprocessors]
   [./elapsed]
     type = PerfGraphData
-    section_name = "App"
+    section_name = "Root"
     data_type = total
   [../]
 []

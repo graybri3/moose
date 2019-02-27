@@ -17,6 +17,9 @@ class HelmholtzFluidProperties;
 template <>
 InputParameters validParams<HelmholtzFluidProperties>();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+
 /**
  * Base class equation of state for fluids that use a Helmholtz free energy
  * alpha(delta, tau), where delta is a scaled density and tau is a scaled temperature.
@@ -42,31 +45,13 @@ public:
   virtual Real e_from_p_T(Real pressure, Real temperature) const override;
   virtual void e_from_p_T(Real p, Real T, Real & e, Real & de_dp, Real & de_dT) const override;
 
-  virtual void rho_e_dpT(Real pressure,
-                         Real temperature,
-                         Real & rho,
-                         Real & drho_dp,
-                         Real & drho_dT,
-                         Real & e,
-                         Real & de_dp,
-                         Real & de_dT) const override;
-
   virtual Real c_from_p_T(Real pressure, Real temperature) const override;
 
   virtual Real cp_from_p_T(Real pressure, Real temperature) const override;
 
+  using SinglePhaseFluidProperties::cp_from_p_T;
+
   virtual Real cv_from_p_T(Real pressure, Real temperature) const override;
-
-  virtual void rho_mu(Real pressure, Real temperature, Real & rho, Real & mu) const override;
-
-  virtual void rho_mu_dpT(Real pressure,
-                          Real temperature,
-                          Real & rho,
-                          Real & drho_dp,
-                          Real & drho_dT,
-                          Real & mu,
-                          Real & dmu_dp,
-                          Real & dmu_dT) const override;
 
   virtual Real s_from_p_T(Real pressure, Real temperature) const override;
   virtual void s_from_p_T(Real p, Real T, Real & s, Real & ds_dp, Real & ds_dT) const override;
@@ -138,5 +123,7 @@ protected:
    */
   virtual Real d2alpha_ddeltatau(Real delta, Real tau) const = 0;
 };
+
+#pragma GCC diagnostic pop
 
 #endif /* HELMHOLTZFLUIDPROPERTIES_H */

@@ -110,27 +110,38 @@ TransientMultiApp::TransientMultiApp(const InputParameters & parameters)
 {
   // Transfer interpolation only makes sense for sub-cycling solves
   if (_interpolate_transfers && !_sub_cycling)
-    mooseError("MultiApp ",
+    paramError("interpolate_transfers",
+               "MultiApp ",
                name(),
                " is set to interpolate_transfers but is not sub_cycling!  That is not valid!");
 
   // Subcycling overrides catch up, we don't want to confuse users by allowing them to set both.
   if (_sub_cycling && _catch_up)
-    mooseError("MultiApp ",
+    paramError("catch_up",
+               "MultiApp ",
                name(),
-               " sub_cycling and catch_up cannot both be set to true simultaneously.");
+               " \"sub_cycling\" and \"catch_up\" cannot both be set to true simultaneously.");
 
   if (_sub_cycling && _keep_solution_during_restore)
-    mooseError("In MultiApp ",
+    paramError("keep_solution_during_restore",
+               "In MultiApp ",
                name(),
                " it doesn't make any sense to keep a solution during restore when doing "
-               "sub_cycling.  Consider trying catch_up steps instead");
+               "sub_cycling.  Consider trying \"catch_up\" steps instead");
 
   if (!_catch_up && _keep_solution_during_restore)
-    mooseError("In MultiApp ",
+    paramError("keep_solution_during_restore",
+               "In MultiApp ",
                name(),
-               " `keep_solution_during_restore` requires `catch_up = true`.  Either disable "
-               "`keep_solution_during_restart` or set `catch_up = true`");
+               " \"keep_solution_during_restore\" requires \"catch_up = true\".  Either disable "
+               "\"keep_solution_during_restart\" or set \"catch_up = true\"");
+
+  if (_sub_cycling && _tolerate_failure)
+    paramInfo("tolerate_failure",
+              "In MultiApp ",
+              name(),
+              " both \"sub_cycling\" and \"tolerate_failure\" are set to true. \"tolerate_failure\""
+              " will be ignored.");
 }
 
 NumericVector<Number> &
@@ -202,7 +213,9 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
 
   _auto_advance = auto_advance;
 
-  _console << "Solving MultiApp " << name() << std::endl;
+  _console << COLOR_CYAN << "Solving MultiApp '" << name() << "' with target time " << target_time
+           << " and dt " << dt << " with auto-advance " << (auto_advance ? "on" : "off")
+           << COLOR_DEFAULT << std::endl;
 
   // "target_time" must always be in global time
   target_time += _app.getGlobalTimeOffset();
@@ -220,7 +233,6 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
 
     for (unsigned int i = 0; i < _my_num_apps; i++)
     {
-
       FEProblemBase & problem = appProblemBase(_first_local_app + i);
 
       Transient * ex = _transient_executioners[i];
@@ -382,8 +394,6 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
       }
       else
       {
-        _console << "Solving Normal Step!" << std::endl;
-
         if (_first && !_app.isRecovering())
           problem.advanceState();
 
@@ -443,7 +453,7 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
             }
           }
         }
-        else
+        else // auto_advance == false
         {
           if (!ex->lastSolveConverged())
           {
@@ -522,14 +532,21 @@ TransientMultiApp::solveStep(Real dt, Real target_time, bool auto_advance)
 }
 
 void
-TransientMultiApp::incrementTStep()
+TransientMultiApp::incrementTStep(Real target_time)
 {
   if (!_sub_cycling)
   {
     for (unsigned int i = 0; i < _my_num_apps; i++)
     {
       Transient * ex = _transient_executioners[i];
-      ex->incrementStepOrReject();
+
+      // The App might have a different local time from the rest of the problem
+      Real app_time_offset = _apps[i]->getGlobalTimeOffset();
+
+      // Only increment the step if we are after (target_time) the
+      // start_time (app_time_offset) of this sub_app.
+      if (app_time_offset < target_time)
+        ex->incrementStepOrReject();
     }
   }
 }
@@ -642,6 +659,9 @@ void TransientMultiApp::setupApp(unsigned int i, Real /*time*/) // FIXME: Should
 
   ex->preExecute();
   if (!_app.isRecovering())
+  {
+    problem.timeStep()++;
     problem.advanceState();
+  }
   _transient_executioners[i] = ex;
 }

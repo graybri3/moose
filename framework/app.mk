@@ -88,7 +88,7 @@ app_unity_srcfiles := $(foreach srcsubdir,$(unity_srcsubdirs),$(call unity_uniqu
 unity_srcfiles += $(app_unity_srcfiles)
 
 # Pick up all of the additional files in the src directory since we're not unity building those
-app_non_unity_srcfiles := $(filter-out %main.C, $(shell find $(non_unity_srcsubdirs) -maxdepth 1 \( -type f -o -type l \) -regex "[^\#~]*\.C"))
+app_non_unity_srcfiles := $(shell find $(non_unity_srcsubdirs) -maxdepth 1 \( -type f -o -type l \) -regex "[^\#~]*\.C" $(find_excludes))
 
 # Override srcfiles
 srcfiles    := $(app_unity_srcfiles) $(app_non_unity_srcfiles)
@@ -351,7 +351,7 @@ endif
 $(app_EXEC): $(app_LIBS) $(mesh_library) $(main_object) $(app_test_LIB) $(depend_test_libs) $(ADDITIONAL_DEPEND_LIBS)
 	@echo "Linking Executable "$@"..."
 	@$(libmesh_LIBTOOL) --tag=CXX $(LIBTOOLFLAGS) --mode=link --quiet \
-	  $(libmesh_CXX) $(libmesh_CXXFLAGS) -o $@ $(main_object) $(applibs) $(libmesh_LIBS) $(libmesh_LDFLAGS) $(depend_test_libs_flags) $(EXTERNAL_FLAGS) $(ADDITIONAL_LIBS)
+	  $(libmesh_CXX) $(libmesh_CXXFLAGS) -o $@ $(main_object) $(applibs) $(ADDITIONAL_LIBS) $(libmesh_LIBS) $(libmesh_LDFLAGS) $(depend_test_libs_flags) $(EXTERNAL_FLAGS)
 	@$(codesign)
 
 # Clang static analyzer

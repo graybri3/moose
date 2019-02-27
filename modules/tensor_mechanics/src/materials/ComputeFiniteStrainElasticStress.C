@@ -24,10 +24,12 @@ ComputeFiniteStrainElasticStress::ComputeFiniteStrainElasticStress(
     const InputParameters & parameters)
   : ComputeStressBase(parameters),
     GuaranteeConsumer(this),
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name)),
     _strain_increment(getMaterialPropertyByName<RankTwoTensor>(_base_name + "strain_increment")),
     _rotation_increment(
         getMaterialPropertyByName<RankTwoTensor>(_base_name + "rotation_increment")),
-    _stress_old(getMaterialPropertyOld<RankTwoTensor>(_base_name + "stress")),
+    _stress_old(getMaterialPropertyOldByName<RankTwoTensor>(_base_name + "stress")),
     _elastic_strain_old(getMaterialPropertyOldByName<RankTwoTensor>(_base_name + "elastic_strain"))
 {
 }
@@ -38,12 +40,6 @@ ComputeFiniteStrainElasticStress::initialSetup()
   if (!hasGuaranteedMaterialProperty(_elasticity_tensor_name, Guarantee::ISOTROPIC))
     mooseError("ComputeFiniteStrainElasticStress can only be used with elasticity tensor materials "
                "that guarantee isotropic tensors.");
-}
-
-void
-ComputeFiniteStrainElasticStress::initQpStatefulProperties()
-{
-  ComputeStressBase::initQpStatefulProperties();
 }
 
 void

@@ -18,6 +18,9 @@ class HydrogenFluidProperties;
 template <>
 InputParameters validParams<HydrogenFluidProperties>();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+
 /**
  * Hydrogen (H2) fluid properties as a function of pressure (Pa)
  * and temperature (K).
@@ -48,17 +51,29 @@ public:
 
   virtual Real mu_from_rho_T(Real density, Real temperature) const override;
 
-  virtual void mu_drhoT_from_rho_T(Real density,
-                                   Real temperature,
-                                   Real ddensity_dT,
-                                   Real & mu,
-                                   Real & dmu_drho,
-                                   Real & dmu_dT) const override;
+  virtual void mu_from_rho_T(Real density,
+                             Real temperature,
+                             Real ddensity_dT,
+                             Real & mu,
+                             Real & dmu_drho,
+                             Real & dmu_dT) const override;
 
   virtual Real mu_from_p_T(Real pressure, Real temperature) const override;
 
   virtual void mu_from_p_T(
       Real pressure, Real temperature, Real & mu, Real & dmu_dp, Real & dmu_dT) const override;
+
+  virtual void
+  rho_mu_from_p_T(Real pressure, Real temperature, Real & rho, Real & mu) const override;
+
+  virtual void rho_mu_from_p_T(Real pressure,
+                               Real temperature,
+                               Real & rho,
+                               Real & drho_dp,
+                               Real & drho_dT,
+                               Real & mu,
+                               Real & dmu_dp,
+                               Real & dmu_dT) const override;
 
   virtual Real k_from_rho_T(Real density, Real temperature) const override;
 
@@ -69,7 +84,7 @@ public:
 
   virtual Real henryConstant(Real temperature) const override;
 
-  virtual void henryConstant_dT(Real temperature, Real & Kh, Real & dKh_dT) const override;
+  virtual void henryConstant(Real temperature, Real & Kh, Real & dKh_dT) const override;
 
   virtual Real criticalPressure() const override;
 
@@ -82,6 +97,8 @@ public:
   virtual Real triplePointTemperature() const override;
 
   virtual Real vaporPressure(Real temperature) const override;
+
+  virtual void vaporPressure(Real temperature, Real & psat, Real & dpsat_dT) const override;
 
 protected:
   /**
@@ -188,5 +205,7 @@ protected:
   const std::array<Real, 5> _b1k{{3.63081e-2, -2.07629e-2, 3.1481e-2, -1.43097e-2, 1.7498e-3}};
   const std::array<Real, 5> _b2k{{1.8337e-3, -8.86716e-3, 1.5826e-2, -1.06283e-2, 2.80673e-3}};
 };
+
+#pragma GCC diagnostic pop
 
 #endif /* HYDROGENFLUIDPROPERTIES_H */

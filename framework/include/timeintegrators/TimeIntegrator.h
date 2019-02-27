@@ -101,6 +101,11 @@ public:
   virtual void computeTimeDerivatives() = 0;
 
   /**
+   * method for computing local automatic differentiation time derivatives
+   */
+  virtual void computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof) = 0;
+
+  /**
    * Gets the total number of nonlinear iterations over all stages of the time step.
    */
   virtual unsigned int getNumNonlinearIterations() const { return _n_nonlinear_iterations; }
@@ -128,8 +133,6 @@ protected:
   /// Nonlinear implicit system, if applicable; otherwise, nullptr
   const NonlinearImplicitSystem * _nonlinear_implicit_system;
 
-  /// solution vector for u^dot
-  NumericVector<Number> & _u_dot;
   /// solution vector for \f$ {du^dot}\over{du} \f$
   Real & _du_dot_du;
   /// solution vectors

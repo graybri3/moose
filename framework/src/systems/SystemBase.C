@@ -24,6 +24,8 @@
 #include "MooseMesh.h"
 #include "MooseUtils.h"
 
+#include "libmesh/dof_map.h"
+
 /// Free function used for a libMesh callback
 void
 extraSendList(std::vector<dof_id_type> & send_list, void * context)
@@ -88,11 +90,14 @@ SystemBase::SystemBase(SubProblem & subproblem,
     _name(name),
     _vars(libMesh::n_threads()),
     _var_map(),
-    _dummy_vec(nullptr),
-    _saved_old(nullptr),
-    _saved_older(nullptr),
+    _saved_old(NULL),
+    _saved_older(NULL),
+    _saved_dot_old(NULL),
+    _saved_dotdot_old(NULL),
     _var_kind(var_kind),
-    _max_var_n_dofs_per_elem(0)
+    _max_var_n_dofs_per_elem(0),
+    _max_var_n_dofs_per_node(0),
+    _time_integrator(nullptr)
 {
 }
 
@@ -101,7 +106,12 @@ SystemBase::getVariable(THREAD_ID tid, const std::string & var_name)
 {
   MooseVariableFEBase * var = dynamic_cast<MooseVariableFEBase *>(_vars[tid].getVariable(var_name));
   if (!var)
-    mooseError("Variable '" + var_name + "' does not exist in this system");
+  {
+    std::stringstream errMsg;
+    errMsg << "Variable '" << var_name << "' does not exist in this system" << std::endl;
+    throw std::runtime_error(errMsg.str().c_str());
+    // mooseError("Variable '" + var_name + "' does not exist in this system");
+  }
   return *var;
 }
 
@@ -111,7 +121,13 @@ SystemBase::getVariable(THREAD_ID tid, unsigned int var_number)
   MooseVariableFEBase * var =
       dynamic_cast<MooseVariableFEBase *>(_vars[tid].getVariable(var_number));
   if (!var)
-    mooseError("variable #" + Moose::stringify(var_number) + " does not exist in this system");
+  {
+    std::stringstream errMsg;
+    errMsg << "Variable '" << Moose::stringify(var_number) << "' does not exist in this system"
+           << std::endl;
+    throw std::runtime_error(errMsg.str().c_str());
+    // mooseError("variable #" + Moose::stringify(var_number) + " does not exist in this system");
+  }
   return *var;
 }
 
@@ -459,8 +475,19 @@ SystemBase::saveOldSolutions()
     _saved_old = &addVector("save_solution_old", false, PARALLEL);
   if (!_saved_older)
     _saved_older = &addVector("save_solution_older", false, PARALLEL);
+  if (!_saved_dot_old && solutionUDotOld())
+    _saved_dot_old = &addVector("save_solution_dot_old", false, PARALLEL);
+  if (!_saved_dotdot_old && solutionUDotDotOld())
+    _saved_dotdot_old = &addVector("save_solution_dotdot_old", false, PARALLEL);
+
   *_saved_old = solutionOld();
   *_saved_older = solutionOlder();
+
+  if (solutionUDotOld())
+    *_saved_dot_old = *solutionUDotOld();
+
+  if (solutionUDotDotOld())
+    *_saved_dotdot_old = *solutionUDotDotOld();
 }
 
 /**
@@ -480,6 +507,18 @@ SystemBase::restoreOldSolutions()
     solutionOlder() = *_saved_older;
     removeVector("save_solution_older");
     _saved_older = nullptr;
+  }
+  if (_saved_dot_old && solutionUDotOld())
+  {
+    *solutionUDotOld() = *_saved_dot_old;
+    removeVector("save_solution_dot_old");
+    _saved_dot_old = NULL;
+  }
+  if (_saved_dotdot_old && solutionUDotDotOld())
+  {
+    *solutionUDotDotOld() = *_saved_dotdot_old;
+    removeVector("save_solution_dotdot_old");
+    _saved_dotdot_old = NULL;
   }
 }
 
@@ -568,11 +607,12 @@ SystemBase::addVariable(const std::string & var_name,
     MooseVariableBase * var;
     if (type == FEType(0, MONOMIAL))
       var = new MooseVariableConstMonomial(
-          var_num, type, *this, _subproblem.assembly(tid), _var_kind);
+          var_num, type, *this, _subproblem.assembly(tid), _var_kind, tid);
     else if (type == FEType(FIRST, NEDELEC_ONE) || type.family == LAGRANGE_VEC)
-      var = new VectorMooseVariable(var_num, type, *this, _subproblem.assembly(tid), _var_kind);
+      var =
+          new VectorMooseVariable(var_num, type, *this, _subproblem.assembly(tid), _var_kind, tid);
     else
-      var = new MooseVariable(var_num, type, *this, _subproblem.assembly(tid), _var_kind);
+      var = new MooseVariable(var_num, type, *this, _subproblem.assembly(tid), _var_kind, tid);
 
     var->scalingFactor(scale_factor);
     _vars[tid].add(var_name, var);
@@ -597,7 +637,7 @@ SystemBase::addScalarVariable(const std::string & var_name,
     // FIXME: we cannot refer fetype in libMesh at this point, so we will just make a copy in
     // MooseVariableBase.
     MooseVariableScalar * var =
-        new MooseVariableScalar(var_num, type, *this, _subproblem.assembly(tid), _var_kind);
+        new MooseVariableScalar(var_num, type, *this, _subproblem.assembly(tid), _var_kind, tid);
     var->scalingFactor(scale_factor);
     _vars[tid].add(var_name, var);
   }
@@ -931,6 +971,10 @@ SystemBase::copySolutionsBackwards()
   system().update();
   solutionOlder() = *currentSolution();
   solutionOld() = *currentSolution();
+  if (solutionUDotOld())
+    *solutionUDotOld() = *solutionUDot();
+  if (solutionUDotDotOld())
+    *solutionUDotDotOld() = *solutionUDotDot();
   if (solutionPreviousNewton())
     *solutionPreviousNewton() = *currentSolution();
 }
@@ -943,6 +987,10 @@ SystemBase::copyOldSolutions()
 {
   solutionOlder() = solutionOld();
   solutionOld() = *currentSolution();
+  if (solutionUDotOld())
+    *solutionUDotOld() = *solutionUDot();
+  if (solutionUDotDotOld())
+    *solutionUDotDotOld() = *solutionUDotDot();
   if (solutionPreviousNewton())
     *solutionPreviousNewton() = *currentSolution();
 }
@@ -955,9 +1003,25 @@ SystemBase::restoreSolutions()
 {
   *(const_cast<NumericVector<Number> *&>(currentSolution())) = solutionOld();
   solution() = solutionOld();
+  if (solutionUDotOld())
+    *solutionUDot() = *solutionUDotOld();
+  if (solutionUDotDotOld())
+    *solutionUDotDot() = *solutionUDotDotOld();
   if (solutionPreviousNewton())
     *solutionPreviousNewton() = solutionOld();
   system().update();
+}
+
+void
+SystemBase::removeVector(const std::string & name)
+{
+  system().remove_vector(name);
+}
+
+const std::string &
+SystemBase::name() const
+{
+  return system().name();
 }
 
 template MooseVariableFE<Real> & SystemBase::getFieldVariable<Real>(THREAD_ID tid,

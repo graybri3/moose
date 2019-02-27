@@ -15,6 +15,7 @@
 #include "Restartable.h"
 
 #include "libmesh/communicator.h"
+#include "libmesh/point.h"
 
 class MultiApp;
 class UserObject;
@@ -61,6 +62,14 @@ public:
 
   virtual void preExecute() {}
 
+  /**
+   * Method called towards the end of the simulation to execute on final.
+   */
+  virtual void finalize();
+
+  /**
+   * Method called at the end of the simulation (after finalize)
+   */
   virtual void postExecute();
 
   /**
@@ -69,13 +78,6 @@ public:
   void setupPositions();
 
   virtual void initialSetup() override;
-
-  /**
-   * Method that reports whether the application has been fully solved or not.
-   * Most transient multiapps are never fully solved, however this method can be
-   * overridden in derived classes.
-   */
-  virtual bool isSolved() const { return false; }
 
   /**
    * Gets called just before transfers are done _to_ the MultiApp
@@ -104,16 +106,7 @@ public:
    * which is called either directly from solveStep() for loose coupling cases
    * or through finishStep() for Picard coupling cases)
    */
-  virtual void incrementTStep() {}
-
-  /**
-   * Deprecated method. Use finishStep
-   */
-  virtual void advanceStep()
-  {
-    mooseDeprecated("advanceStep() is deprecated; please use finishStep() instead");
-    finishStep();
-  }
+  virtual void incrementTStep(Real /*target_time*/) {}
 
   /**
    * Calls multi-apps executioners' endStep and postStep methods which creates output and advances
@@ -391,6 +384,9 @@ protected:
   /// Whether or not to move the output of the MultiApp into position
   bool _output_in_position;
 
+  /// The offset time so the MultiApp local time relative to the global time
+  const Real _global_time_offset;
+
   /// The time at which to reset apps
   Real _reset_time;
 
@@ -417,6 +413,9 @@ protected:
 
   /// Backups for each local App
   SubAppBackups & _backups;
+
+  /// Storage for command line arguments
+  const std::vector<std::string> & _cli_args;
 };
 
 template <>

@@ -1,17 +1,23 @@
 #pylint: disable=missing-docstring, no-self-use
+#* This file is part of the MOOSE framework
+#* https://www.mooseframework.org
+#*
+#* All rights reserved, see COPYRIGHT for full restrictions
+#* https://github.com/idaholab/moose/blob/master/COPYRIGHT
+#*
+#* Licensed under LGPL 2.1, please see LICENSE for details
+#* https://www.gnu.org/licenses/lgpl-2.1.html
+
+from MooseDocs.common import exceptions
 from MooseDocs.base import components
-from MooseDocs.extensions import command, materialicon
-from MooseDocs.tree import tokens, html
-from MooseDocs.tree.base import Property
+from MooseDocs.extensions import core, command, materialicon
+from MooseDocs.tree import tokens, html, latex
 
 def make_extension(**kwargs):
     return LayoutExtension(**kwargs)
 
-class ColumnToken(tokens.Token):
-    PROPERTIES = [Property('width', ptype=unicode, required=False)]
-
-class RowToken(tokens.Token):
-    pass
+ColumnToken = tokens.newToken('ColumnToken', width=u'', small=12, medium=12, large=12)
+RowToken = tokens.newToken('RowToken')
 
 class LayoutExtension(command.CommandExtension):
     """
@@ -26,12 +32,12 @@ class LayoutExtension(command.CommandExtension):
         return config
 
     def extend(self, reader, renderer):
-        self.requires(command, materialicon)
-        self.addCommand(RowCommand())
-        self.addCommand(ColumnCommand())
+        self.requires(core, command, materialicon)
+        self.addCommand(reader, RowCommand())
+        self.addCommand(reader, ColumnCommand())
 
-        renderer.add(ColumnToken, RenderColumnToken())
-        renderer.add(RowToken, RenderRowToken())
+        renderer.add('ColumnToken', RenderColumnToken())
+        renderer.add('RowToken', RenderRowToken())
 
 class RowCommand(command.CommandComponent):
     COMMAND = 'row'
@@ -42,7 +48,7 @@ class RowCommand(command.CommandComponent):
         settings = command.CommandComponent.defaultSettings()
         return settings
 
-    def createToken(self, info, parent):
+    def createToken(self, parent, info, page):
         return RowToken(parent, **self.attributes)
 
 
@@ -53,45 +59,73 @@ class ColumnCommand(command.CommandComponent):
     @staticmethod
     def defaultSettings():
         settings = command.CommandComponent.defaultSettings()
-        settings['width'] = (None, "The default width of the column.")
+        settings['width'] = (None, "The default width of the column (HTML output only).")
         settings['icon'] = (None, "Material icon to place at top of column.")
+        settings['small'] = (12, "The number of columns for small displays (1-12).")
+        settings['medium'] = (12, "The number of columns for medium displays (1-12), " \
+                                  "this is used by the LaTeX output for determining the number " \
+                                  "of columns.")
+        settings['large'] = (12, "The number of columns for large displays (1-12).")
         return settings
 
-    def createToken(self, info, parent):
-        col = ColumnToken(parent, width=self.settings['width'], **self.attributes)
+    def createToken(self, parent, info, page):
+
+        sml = []
+        for s in ['small', 'medium', 'large']:
+            sml.append(int(self.settings[s]))
+            if sml[-1] < 1 or sml[-1] > 12:
+                msg = "The '{}' setting must be an integer between 1 and 12."
+                raise exceptions.MooseDocsException(msg, s)
+
+        col = ColumnToken(parent,
+                          width=self.settings['width'],
+                          small=sml[0],
+                          medium=sml[1],
+                          large=sml[2],
+                          **self.attributes)
 
         icon = self.settings.get('icon', None)
         if icon:
-            block = materialicon.IconBlockToken(col)
-            h = tokens.Heading(block, level=2, class_='center brown-text')
-            materialicon.IconToken(h, icon=unicode(icon))
-            return block
+            materialicon.Icon(col, icon=unicode(icon), class_='moose-col-icon')
 
         return col
 
 class RenderRowToken(components.RenderComponent):
-    def createHTML(self, token, parent):
-        row = html.Tag(parent, 'div', class_='moose-row', **token.attributes)
+    def createHTML(self, parent, token, page):
+        row = html.Tag(parent, 'div', token)
+        row.addClass('moose-row')
         row.addStyle('display:flex')
         return row
 
-    def createMaterialize(self, token, parent):
-        row = html.Tag(parent, 'div', class_='row', **token.attributes)
+    def createMaterialize(self, parent, token, page):
+        row = html.Tag(parent, 'div', token)
+        row.addClass('row')
         return row
 
-    def createLatex(self, token, parent):
-        pass
+    def createLatex(self, parent, token, page):
+        return parent
 
 class RenderColumnToken(components.RenderComponent):
-    def createHTML(self, token, parent):
-        col = html.Tag(parent, 'div', class_='moose-column', **token.attributes)
-        col.addStyle('flex:{};'.format(token.width))
+    def createHTML(self, parent, token, page):
+        col = html.Tag(parent, 'div', token)
+        col.addStyle('flex:{};'.format(token['width']))
+        col.addClass('moose-column')
         return col
 
-    def createMaterialize(self, token, parent):
-        col = html.Tag(parent, 'div', **token.attributes)
+    def createMaterialize(self, parent, token, page):
+        col = html.Tag(parent, 'div', token)
         col.addClass('col')
+        col.addClass('s{}'.format(token['small']))
+        col.addClass('m{}'.format(token['medium']))
+        col.addClass('l{}'.format(token['large']))
         return col
 
-    def createLatex(self, token, parent):
-        pass
+    def createLatex(self, parent, token, page):
+        pad = len(token.parent)*0.01
+        width = '{}\\textwidth'.format(token['medium']/12. - pad)
+        env = latex.Environment(parent, 'minipage',
+                                args=[latex.Bracket(string='t'),
+                                      latex.Brace(string=width, escape=False)])
+        if token is not token.parent.children[-1]:
+            latex.Command(parent, 'hfill')
+        return env

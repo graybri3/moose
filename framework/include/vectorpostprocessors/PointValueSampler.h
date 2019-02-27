@@ -23,6 +23,8 @@ class PointValueSampler : public PointSamplerBase
 {
 public:
   PointValueSampler(const InputParameters & parameters);
+
+  virtual void initialize() override;
 };
 
 #endif

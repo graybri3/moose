@@ -18,6 +18,9 @@ class Water97FluidProperties;
 template <>
 InputParameters validParams<Water97FluidProperties>();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+
 /**
  * Water (H2O) fluid properties as a function of pressure (Pa)
  * and temperature (K) from IAPWS-IF97:
@@ -67,18 +70,11 @@ public:
   virtual void
   e_from_p_T(Real pressure, Real temperature, Real & e, Real & de_dp, Real & de_dT) const override;
 
-  virtual void rho_e_dpT(Real pressure,
-                         Real temperature,
-                         Real & rho,
-                         Real & drho_dp,
-                         Real & drho_dT,
-                         Real & e,
-                         Real & de_dp,
-                         Real & de_dT) const override;
-
   virtual Real c_from_p_T(Real pressure, Real temperature) const override;
 
   virtual Real cp_from_p_T(Real pressure, Real temperature) const override;
+
+  using SinglePhaseFluidProperties::cp_from_p_T;
 
   virtual Real cv_from_p_T(Real pressure, Real temperature) const override;
 
@@ -89,23 +85,24 @@ public:
 
   virtual Real mu_from_rho_T(Real density, Real temperature) const override;
 
-  virtual void mu_drhoT_from_rho_T(Real density,
-                                   Real temperature,
-                                   Real ddensity_dT,
-                                   Real & mu,
-                                   Real & dmu_drho,
-                                   Real & dmu_dT) const override;
+  virtual void mu_from_rho_T(Real density,
+                             Real temperature,
+                             Real ddensity_dT,
+                             Real & mu,
+                             Real & dmu_drho,
+                             Real & dmu_dT) const override;
 
-  virtual void rho_mu(Real pressure, Real temperature, Real & rho, Real & mu) const override;
+  virtual void
+  rho_mu_from_p_T(Real pressure, Real temperature, Real & rho, Real & mu) const override;
 
-  virtual void rho_mu_dpT(Real pressure,
-                          Real temperature,
-                          Real & rho,
-                          Real & drho_dp,
-                          Real & drho_dT,
-                          Real & mu,
-                          Real & dmu_dp,
-                          Real & dmu_dT) const override;
+  virtual void rho_mu_from_p_T(Real pressure,
+                               Real temperature,
+                               Real & rho,
+                               Real & drho_dp,
+                               Real & drho_dT,
+                               Real & mu,
+                               Real & dmu_dp,
+                               Real & dmu_dT) const override;
 
   virtual Real k_from_p_T(Real pressure, Real temperature) const override;
 
@@ -124,7 +121,7 @@ public:
 
   virtual Real vaporPressure(Real temperature) const override;
 
-  virtual void vaporPressure_dT(Real temperature, Real & psat, Real & dpsat_dT) const override;
+  virtual void vaporPressure(Real temperature, Real & psat, Real & dpsat_dT) const override;
 
   /**
    * Saturation temperature as a function of pressure
@@ -1301,5 +1298,7 @@ protected:
   /// Pressure scale for each region
   const std::array<Real, 5> _p_star{{16.53e6, 1.0e6, 1.0e6, 1.0e6, 1.0e6}};
 };
+
+#pragma GCC diagnostic pop
 
 #endif /* WATER97FLUIDPROPERTIES_H */

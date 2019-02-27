@@ -66,6 +66,8 @@ FiniteStrainHyperElasticViscoPlastic::FiniteStrainHyperElasticViscoPlastic(
     _fp(declareProperty<RankTwoTensor>(_base_name + "fp")),
     _fp_old(getMaterialPropertyOld<RankTwoTensor>(_base_name + "fp")),
     _ce(declareProperty<RankTwoTensor>(_base_name + "ce")),
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name)),
     _deformation_gradient(getMaterialProperty<RankTwoTensor>(_base_name + "deformation_gradient")),
     _deformation_gradient_old(
         getMaterialPropertyOld<RankTwoTensor>(_base_name + "deformation_gradient")),
@@ -182,12 +184,9 @@ void
 FiniteStrainHyperElasticViscoPlastic::initQpStatefulProperties()
 {
   _stress[_qp].zero();
-
-  _fp[_qp].zero();
-  _fp[_qp].addIa(1.0);
   _ce[_qp].zero();
-
   _pk2[_qp].zero();
+  _fp[_qp].setToIdentity();
 
   for (unsigned int i = 0; i < _num_flow_rate_uos; ++i)
     (*_flow_rate_prop[i])[_qp] = 0.0;
@@ -481,8 +480,7 @@ FiniteStrainHyperElasticViscoPlastic::computePK2StressAndDerivative()
 void
 FiniteStrainHyperElasticViscoPlastic::computeElasticStrain()
 {
-  RankTwoTensor iden;
-  iden.addIa(1.0);
+  RankTwoTensor iden(RankTwoTensor::initIdentity);
   _ee = 0.5 * (_ce[_qp] - iden);
 }
 
@@ -505,8 +503,7 @@ FiniteStrainHyperElasticViscoPlastic::computeElasticRightCauchyGreenTensor()
 void
 FiniteStrainHyperElasticViscoPlastic::computeElasticPlasticDeformGrad()
 {
-  RankTwoTensor iden;
-  iden.addIa(1.0);
+  RankTwoTensor iden(RankTwoTensor::initIdentity);
 
   RankTwoTensor val;
   for (unsigned int i = 0; i < _num_flow_rate_uos; ++i)

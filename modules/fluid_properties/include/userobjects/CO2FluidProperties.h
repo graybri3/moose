@@ -18,6 +18,9 @@ class CO2FluidProperties;
 template <>
 InputParameters validParams<CO2FluidProperties>();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+
 /**
  * CO2 fluid properties
  * Most thermophysical properties taken from:
@@ -58,12 +61,24 @@ public:
 
   virtual Real mu_from_rho_T(Real density, Real temperature) const override;
 
-  virtual void mu_drhoT_from_rho_T(Real density,
-                                   Real temperature,
-                                   Real ddensity_dT,
-                                   Real & mu,
-                                   Real & dmu_drho,
-                                   Real & dmu_dT) const override;
+  virtual void mu_from_rho_T(Real density,
+                             Real temperature,
+                             Real ddensity_dT,
+                             Real & mu,
+                             Real & dmu_drho,
+                             Real & dmu_dT) const override;
+
+  virtual void
+  rho_mu_from_p_T(Real pressure, Real temperature, Real & rho, Real & mu) const override;
+
+  virtual void rho_mu_from_p_T(Real pressure,
+                               Real temperature,
+                               Real & rho,
+                               Real & drho_dp,
+                               Real & drho_dT,
+                               Real & mu,
+                               Real & dmu_dp,
+                               Real & dmu_dT) const override;
 
   virtual std::string fluidName() const override;
 
@@ -103,6 +118,8 @@ public:
 
   virtual Real vaporPressure(Real temperature) const override;
 
+  virtual void vaporPressure(Real temperature, Real & psat, Real & dpsat_dT) const override;
+
   /**
    * Saturated liquid density of CO2
    * Valid for temperatures between the triple point temperature
@@ -131,7 +148,7 @@ public:
 
   virtual Real henryConstant(Real temperature) const override;
 
-  virtual void henryConstant_dT(Real temperature, Real & Kh, Real & dKh_dT) const override;
+  virtual void henryConstant(Real temperature, Real & Kh, Real & dKh_dT) const override;
 
   /**
    * Partial density of dissolved CO2
@@ -239,5 +256,7 @@ protected:
   const std::array<Real, 12> _k_a{
       {3.0, 6.70697, 0.94604, 0.3, 0.3, 0.39751, 0.33791, 0.77963, 0.79857, 0.9, 0.02, 0.2}};
 };
+
+#pragma GCC diagnostic pop
 
 #endif /* CO2FLUIDPROPERTIES_H */

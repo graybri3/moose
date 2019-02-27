@@ -11,6 +11,7 @@
 #include "MooseError.h"
 
 #include "libmesh/nanoflann.hpp"
+#include "libmesh/point.h"
 
 KDTree::KDTree(std::vector<Point> & master_points, unsigned int max_leaf_size)
   : _point_list_adaptor(master_points.begin(), master_points.end()),
@@ -47,4 +48,13 @@ KDTree::neighborSearch(Point & query_point,
 
   return_index.resize(n_result);
   return_dist_sqr.resize(n_result);
+}
+
+void
+KDTree::radiusSearch(Point & query_point,
+                     Real radius,
+                     std::vector<std::pair<std::size_t, Real>> & indices_dist)
+{
+  nanoflann::SearchParams sp;
+  _kd_tree->radiusSearch(&query_point(0), radius * radius, indices_dist, sp);
 }

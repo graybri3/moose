@@ -100,9 +100,15 @@ StressDivergenceTensors::StressDivergenceTensors(const InputParameters & paramet
     _rotation_increment = &getMaterialProperty<RankTwoTensor>(_base_name + "rotation_increment");
   }
 
-  // Error if volumetic locking correction is turned on for 1D problems
+  // Error if volumetric locking correction is turned on for 1D problems
   if (_ndisp == 1 && _volumetric_locking_correction)
     mooseError("Volumetric locking correction should be set to false for 1-D problems.");
+
+  // Generate warning when volumetric locking correction is used with second order elements
+  if (_mesh.hasSecondOrderElements() && _volumetric_locking_correction)
+    mooseWarning("Volumteric locking correction is not required for second order elements. Using "
+                 "volumetric locking with second order elements could cause zigzag patterns in "
+                 "stresses and strains.");
 }
 
 void
@@ -153,6 +159,12 @@ StressDivergenceTensors::computeQpResidual()
 void
 StressDivergenceTensors::computeJacobian()
 {
+  if (_volumetric_locking_correction)
+  {
+    computeAverageGradientTest();
+    computeAverageGradientPhi();
+  }
+
   if (_use_finite_deform_jacobian)
   {
     _finite_deform_Jacobian_mult.resize(_qrule->n_points());
@@ -163,19 +175,18 @@ StressDivergenceTensors::computeJacobian()
     ALEKernel::computeJacobian();
   }
   else
-  {
-    if (_volumetric_locking_correction)
-    {
-      computeAverageGradientTest();
-      computeAverageGradientPhi();
-    }
     Kernel::computeJacobian();
-  }
 }
 
 void
 StressDivergenceTensors::computeOffDiagJacobian(MooseVariableFEBase & jvar)
 {
+  if (_volumetric_locking_correction)
+  {
+    computeAverageGradientPhi();
+    computeAverageGradientTest();
+  }
+
   if (_use_finite_deform_jacobian)
   {
     _finite_deform_Jacobian_mult.resize(_qrule->n_points());
@@ -186,14 +197,7 @@ StressDivergenceTensors::computeOffDiagJacobian(MooseVariableFEBase & jvar)
     ALEKernel::computeOffDiagJacobian(jvar);
   }
   else
-  {
-    if (_volumetric_locking_correction)
-    {
-      computeAverageGradientPhi();
-      computeAverageGradientTest();
-    }
     Kernel::computeOffDiagJacobian(jvar);
-  }
 }
 
 Real

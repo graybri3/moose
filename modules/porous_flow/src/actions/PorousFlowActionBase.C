@@ -13,6 +13,9 @@
 #include "MooseMesh.h"
 #include "libmesh/string_to_enum.h"
 #include "Conversion.h"
+#include "AddKernelAction.h"
+#include "AddPostprocessorAction.h"
+#include "AddBCAction.h"
 
 template <>
 InputParameters
@@ -52,7 +55,7 @@ validParams<PorousFlowActionBase>()
                                 "The number of secondary species in the aqueous-kinetic reaction "
                                 "system involved in precipitation and dissolution.  (Leave as zero "
                                 "if the simulation does not involve chemistry)");
-  params.addParam<std::vector<NonlinearVariableName>>(
+  params.addParam<std::vector<VariableName>>(
       "displacements",
       "The name of the displacement variables (relevant only for "
       "mechanically-coupled simulations)");
@@ -63,13 +66,24 @@ validParams<PorousFlowActionBase>()
                                "thermally-coupled simulations with thermal expansion.");
   params.addParam<bool>(
       "use_displaced_mesh", false, "Use displaced mesh computations in mechanical kernels");
+  MooseEnum flux_limiter_type("MinMod VanLeer MC superbee None", "VanLeer");
+  params.addParam<MooseEnum>(
+      "flux_limiter_type",
+      flux_limiter_type,
+      "Type of flux limiter to use if stabilization=KT.  'None' means that no antidiffusion "
+      "will be added in the Kuzmin-Turek scheme");
+  MooseEnum stabilization("Full KT", "Full");
+  params.addParam<MooseEnum>("stabilization",
+                             stabilization,
+                             "Numerical stabilization used.  'Full' means full upwinding.  'KT' "
+                             "means FEM-TVD stabilization of Kuzmin-Turek");
   return params;
 }
 
 PorousFlowActionBase::PorousFlowActionBase(const InputParameters & params)
   : Action(params),
     PorousFlowDependencies(),
-    _objects_to_add(),
+    _included_objects(),
     _dictator_name(getParam<std::string>("dictator_name")),
     _num_aqueous_equilibrium(getParam<unsigned int>("number_aqueous_equilibrium")),
     _num_aqueous_kinetic(getParam<unsigned int>("number_aqueous_kinetic")),
@@ -77,11 +91,13 @@ PorousFlowActionBase::PorousFlowActionBase(const InputParameters & params)
     _mass_fraction_vars(getParam<std::vector<VariableName>>("mass_fraction_vars")),
     _num_mass_fraction_vars(_mass_fraction_vars.size()),
     _temperature_var(getParam<std::vector<VariableName>>("temperature")),
-    _displacements(getParam<std::vector<NonlinearVariableName>>("displacements")),
+    _displacements(getParam<std::vector<VariableName>>("displacements")),
     _ndisp(_displacements.size()),
-    _coupled_displacements(_ndisp)
+    _coupled_displacements(_ndisp),
+    _flux_limiter_type(getParam<MooseEnum>("flux_limiter_type")),
+    _stabilization(getParam<MooseEnum>("stabilization").getEnum<StabilizationEnum>())
 {
-  // convert vector of NonlinearVariableName to vector of VariableName
+  // convert vector of VariableName to vector of VariableName
   for (unsigned int i = 0; i < _ndisp; ++i)
     _coupled_displacements[i] = _displacements[i];
 }
@@ -89,6 +105,10 @@ PorousFlowActionBase::PorousFlowActionBase(const InputParameters & params)
 void
 PorousFlowActionBase::act()
 {
+  // Check if the simulation is transient (note: can't do this in the ctor)
+  _transient = _problem->isTransient();
+
+  // Make sure that all mesh subdomains have the same coordinate system
   const auto & all_subdomains = _problem->mesh().meshSubdomains();
   if (all_subdomains.empty())
     mooseError("No subdomains found");
@@ -98,8 +118,68 @@ PorousFlowActionBase::act()
       mooseError(
           "The PorousFlow Actions require all subdomains to have the same coordinate system.");
 
+  // Note: this must be called before addMaterials!
+  addMaterialDependencies();
+
+  // Make the vector of added objects unique
+  std::sort(_included_objects.begin(), _included_objects.end());
+  _included_objects.erase(std::unique(_included_objects.begin(), _included_objects.end()),
+                          _included_objects.end());
+
   if (_current_task == "add_user_object")
-    addDictator();
+    addUserObjects();
+
+  if (_current_task == "add_aux_variable" || _current_task == "add_aux_kernel")
+    addAuxObjects();
+
+  if (_current_task == "add_kernel")
+    addKernels();
+
+  if (_current_task == "add_material")
+    addMaterials();
+}
+
+void
+PorousFlowActionBase::addMaterialDependencies()
+{
+  // Check to see if there are any other PorousFlow objects like BCs that
+  // may require specific versions of materials added using this action
+
+  // Unique list of auxkernels added in input file
+  auto auxkernels = _awh.getActions<AddKernelAction>();
+  for (auto & auxkernel : auxkernels)
+    _included_objects.push_back(auxkernel->getMooseObjectType());
+
+  // Unique list of postprocessors added in input file
+  auto postprocessors = _awh.getActions<AddPostprocessorAction>();
+  for (auto & postprocessor : postprocessors)
+    _included_objects.push_back(postprocessor->getMooseObjectType());
+
+  // Unique list of BCs added in input file
+  auto bcs = _awh.getActions<AddBCAction>();
+  for (auto & bc : bcs)
+    _included_objects.push_back(bc->getMooseObjectType());
+}
+
+void
+PorousFlowActionBase::addUserObjects()
+{
+  addDictator();
+}
+
+void
+PorousFlowActionBase::addAuxObjects()
+{
+}
+
+void
+PorousFlowActionBase::addKernels()
+{
+}
+
+void
+PorousFlowActionBase::addMaterials()
+{
 }
 
 void
@@ -467,6 +547,117 @@ PorousFlowActionBase::addCapillaryPressureVG(Real m, Real alpha, std::string use
     InputParameters params = _factory.getValidParams(userobject_type);
     params.set<Real>("m") = m;
     params.set<Real>("alpha") = alpha;
+    _problem->addUserObject(userobject_type, userobject_name, params);
+  }
+}
+
+void
+PorousFlowActionBase::addAdvectiveFluxCalculatorSaturated(unsigned phase,
+                                                          bool multiply_by_density,
+                                                          std::string userobject_name)
+{
+  if (_stabilization == StabilizationEnum::KT && _current_task == "add_user_object")
+  {
+    const std::string userobject_type = "PorousFlowAdvectiveFluxCalculatorSaturated";
+    InputParameters params = _factory.getValidParams(userobject_type);
+    params.set<MooseEnum>("flux_limiter_type") = _flux_limiter_type;
+    params.set<RealVectorValue>("gravity") = _gravity;
+    params.set<UserObjectName>("PorousFlowDictator") = _dictator_name;
+    params.set<unsigned>("phase") = phase;
+    params.set<bool>("multiply_by_density") = multiply_by_density;
+    _problem->addUserObject(userobject_type, userobject_name, params);
+  }
+}
+
+void
+PorousFlowActionBase::addAdvectiveFluxCalculatorUnsaturated(unsigned phase,
+                                                            bool multiply_by_density,
+                                                            std::string userobject_name)
+{
+  if (_stabilization == StabilizationEnum::KT && _current_task == "add_user_object")
+  {
+    const std::string userobject_type = "PorousFlowAdvectiveFluxCalculatorUnsaturated";
+    InputParameters params = _factory.getValidParams(userobject_type);
+    params.set<MooseEnum>("flux_limiter_type") = _flux_limiter_type;
+    params.set<RealVectorValue>("gravity") = _gravity;
+    params.set<UserObjectName>("PorousFlowDictator") = _dictator_name;
+    params.set<unsigned>("phase") = phase;
+    params.set<bool>("multiply_by_density") = multiply_by_density;
+    _problem->addUserObject(userobject_type, userobject_name, params);
+  }
+}
+
+void
+PorousFlowActionBase::addAdvectiveFluxCalculatorSaturatedHeat(unsigned phase,
+                                                              bool multiply_by_density,
+                                                              std::string userobject_name)
+{
+  if (_stabilization == StabilizationEnum::KT && _current_task == "add_user_object")
+  {
+    const std::string userobject_type = "PorousFlowAdvectiveFluxCalculatorSaturatedHeat";
+    InputParameters params = _factory.getValidParams(userobject_type);
+    params.set<MooseEnum>("flux_limiter_type") = _flux_limiter_type;
+    params.set<RealVectorValue>("gravity") = _gravity;
+    params.set<UserObjectName>("PorousFlowDictator") = _dictator_name;
+    params.set<unsigned>("phase") = phase;
+    params.set<bool>("multiply_by_density") = multiply_by_density;
+    _problem->addUserObject(userobject_type, userobject_name, params);
+  }
+}
+
+void
+PorousFlowActionBase::addAdvectiveFluxCalculatorUnsaturatedHeat(unsigned phase,
+                                                                bool multiply_by_density,
+                                                                std::string userobject_name)
+{
+  if (_stabilization == StabilizationEnum::KT && _current_task == "add_user_object")
+  {
+    const std::string userobject_type = "PorousFlowAdvectiveFluxCalculatorUnsaturatedHeat";
+    InputParameters params = _factory.getValidParams(userobject_type);
+    params.set<MooseEnum>("flux_limiter_type") = _flux_limiter_type;
+    params.set<RealVectorValue>("gravity") = _gravity;
+    params.set<UserObjectName>("PorousFlowDictator") = _dictator_name;
+    params.set<unsigned>("phase") = phase;
+    params.set<bool>("multiply_by_density") = multiply_by_density;
+    _problem->addUserObject(userobject_type, userobject_name, params);
+  }
+}
+
+void
+PorousFlowActionBase::addAdvectiveFluxCalculatorSaturatedMultiComponent(unsigned phase,
+                                                                        unsigned fluid_component,
+                                                                        bool multiply_by_density,
+                                                                        std::string userobject_name)
+{
+  if (_stabilization == StabilizationEnum::KT && _current_task == "add_user_object")
+  {
+    const std::string userobject_type = "PorousFlowAdvectiveFluxCalculatorSaturatedMultiComponent";
+    InputParameters params = _factory.getValidParams(userobject_type);
+    params.set<MooseEnum>("flux_limiter_type") = _flux_limiter_type;
+    params.set<RealVectorValue>("gravity") = _gravity;
+    params.set<UserObjectName>("PorousFlowDictator") = _dictator_name;
+    params.set<unsigned>("phase") = phase;
+    params.set<bool>("multiply_by_density") = multiply_by_density;
+    params.set<unsigned>("fluid_component") = fluid_component;
+    _problem->addUserObject(userobject_type, userobject_name, params);
+  }
+}
+
+void
+PorousFlowActionBase::addAdvectiveFluxCalculatorUnsaturatedMultiComponent(
+    unsigned phase, unsigned fluid_component, bool multiply_by_density, std::string userobject_name)
+{
+  if (_stabilization == StabilizationEnum::KT && _current_task == "add_user_object")
+  {
+    const std::string userobject_type =
+        "PorousFlowAdvectiveFluxCalculatorUnsaturatedMultiComponent";
+    InputParameters params = _factory.getValidParams(userobject_type);
+    params.set<MooseEnum>("flux_limiter_type") = _flux_limiter_type;
+    params.set<RealVectorValue>("gravity") = _gravity;
+    params.set<UserObjectName>("PorousFlowDictator") = _dictator_name;
+    params.set<unsigned>("phase") = phase;
+    params.set<bool>("multiply_by_density") = multiply_by_density;
+    params.set<unsigned>("fluid_component") = fluid_component;
     _problem->addUserObject(userobject_type, userobject_name, params);
   }
 }

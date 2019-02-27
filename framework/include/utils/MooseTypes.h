@@ -11,23 +11,19 @@
 #define MOOSETYPES_H
 
 #include "Moose.h"
+#include "DualReal.h"
 
 #include "libmesh/libmesh.h"
 #include "libmesh/id_types.h"
 #include "libmesh/stored_range.h"
-#include "libmesh/elem.h"
 #include "libmesh/petsc_macro.h"
 #include "libmesh/boundary_info.h"
 #include "libmesh/parameters.h"
-#include "libmesh/vector_value.h"
-#include "libmesh/tensor_value.h"
-#include "libmesh/type_n_tensor.h"
-
-#include "metaphysicl/dualnumber.h"
-#include "metaphysicl/numberarray.h"
 
 // BOOST include
 #include "bitmask_operators.h"
+
+#include "libmesh/tensor_tools.h"
 
 #include <string>
 #include <vector>
@@ -77,12 +73,45 @@
  */
 template <typename>
 class MooseArray;
-class RankTwoTensor;
-class RankFourTensor;
+template <typename>
+class RankTwoTensorTempl;
+typedef RankTwoTensorTempl<Real> RankTwoTensor;
+typedef RankTwoTensorTempl<DualReal> DualRankTwoTensor;
+template <typename>
+class RankFourTensorTempl;
+typedef RankFourTensorTempl<Real> RankFourTensor;
+typedef RankFourTensorTempl<DualReal> DualRankFourTensor;
 template <typename>
 class MaterialProperty;
 template <typename>
 class ADMaterialPropertyObject;
+
+namespace libMesh
+{
+template <typename>
+class VectorValue;
+typedef VectorValue<Real> RealVectorValue;
+template <typename>
+class TypeVector;
+template <typename>
+class TensorValue;
+typedef TensorValue<Real> RealTensorValue;
+template <typename>
+class TypeTensor;
+template <unsigned int, typename>
+class TypeNTensor;
+class Point;
+}
+
+/**
+ * Convenience macros for automatic dual/non-dual typing
+ */
+#define ADReal typename Moose::RealType<compute_stage>::type
+#define ADRealVectorValue typename RealVectorValueType<compute_stage>::type
+#define ADPoint typename PointType<compute_stage>::type
+#define ADRealTensorValue typename RealTensorValueType<compute_stage>::type
+#define ADRankTwoTensor typename RankTwoTensorType<compute_stage>::type
+#define ADRankFourTensor typename RankFourTensorType<compute_stage>::type
 
 /**
  * MOOSE typedefs
@@ -130,86 +159,43 @@ struct OutputTools
 };
 
 typedef MooseArray<Real> VariableValue;
-typedef MooseArray<VectorValue<Real>> VariableGradient;
-typedef MooseArray<TensorValue<Real>> VariableSecond;
+typedef MooseArray<libMesh::VectorValue<Real>> VariableGradient;
+typedef MooseArray<libMesh::TensorValue<Real>> VariableSecond;
 typedef MooseArray<Real> VariableCurl;
 
 typedef MooseArray<std::vector<Real>> VariablePhiValue;
-typedef MooseArray<std::vector<VectorValue<Real>>> VariablePhiGradient;
-typedef MooseArray<std::vector<TensorValue<Real>>> VariablePhiSecond;
+typedef MooseArray<std::vector<libMesh::VectorValue<Real>>> VariablePhiGradient;
+typedef MooseArray<std::vector<libMesh::TensorValue<Real>>> VariablePhiSecond;
 typedef MooseArray<std::vector<Real>> VariablePhiCurl;
 
 typedef MooseArray<std::vector<Real>> VariableTestValue;
-typedef MooseArray<std::vector<VectorValue<Real>>> VariableTestGradient;
-typedef MooseArray<std::vector<TensorValue<Real>>> VariableTestSecond;
+typedef MooseArray<std::vector<libMesh::VectorValue<Real>>> VariableTestGradient;
+typedef MooseArray<std::vector<libMesh::TensorValue<Real>>> VariableTestSecond;
 typedef MooseArray<std::vector<Real>> VariableTestCurl;
 
-typedef MooseArray<VectorValue<Real>> VectorVariableValue;
-typedef MooseArray<TensorValue<Real>> VectorVariableGradient;
-typedef MooseArray<TypeNTensor<3, Real>> VectorVariableSecond;
-typedef MooseArray<VectorValue<Real>> VectorVariableCurl;
+typedef MooseArray<libMesh::VectorValue<Real>> VectorVariableValue;
+typedef MooseArray<libMesh::TensorValue<Real>> VectorVariableGradient;
+typedef MooseArray<libMesh::TypeNTensor<3, Real>> VectorVariableSecond;
+typedef MooseArray<libMesh::VectorValue<Real>> VectorVariableCurl;
 
-typedef MooseArray<std::vector<VectorValue<Real>>> VectorVariablePhiValue;
-typedef MooseArray<std::vector<TensorValue<Real>>> VectorVariablePhiGradient;
-typedef MooseArray<std::vector<TypeNTensor<3, Real>>> VectorVariablePhiSecond;
-typedef MooseArray<std::vector<VectorValue<Real>>> VectorVariablePhiCurl;
+typedef MooseArray<std::vector<libMesh::VectorValue<Real>>> VectorVariablePhiValue;
+typedef MooseArray<std::vector<libMesh::TensorValue<Real>>> VectorVariablePhiGradient;
+typedef MooseArray<std::vector<libMesh::TypeNTensor<3, Real>>> VectorVariablePhiSecond;
+typedef MooseArray<std::vector<libMesh::VectorValue<Real>>> VectorVariablePhiCurl;
 
-typedef MooseArray<std::vector<VectorValue<Real>>> VectorVariableTestValue;
-typedef MooseArray<std::vector<TensorValue<Real>>> VectorVariableTestGradient;
-typedef MooseArray<std::vector<TypeNTensor<3, Real>>> VectorVariableTestSecond;
-typedef MooseArray<std::vector<VectorValue<Real>>> VectorVariableTestCurl;
+typedef MooseArray<std::vector<libMesh::VectorValue<Real>>> VectorVariableTestValue;
+typedef MooseArray<std::vector<libMesh::TensorValue<Real>>> VectorVariableTestGradient;
+typedef MooseArray<std::vector<libMesh::TypeNTensor<3, Real>>> VectorVariableTestSecond;
+typedef MooseArray<std::vector<libMesh::VectorValue<Real>>> VectorVariableTestCurl;
 
-/*
- * DualNumber naming
- */
-#define AD_MAX_DOFS_PER_ELEM 50
-using MetaPhysicL::DualNumber;
-using MetaPhysicL::NumberArray;
-
-typedef DualNumber<Real, NumberArray<AD_MAX_DOFS_PER_ELEM, Real>> ADReal;
 template <template <class> class W>
-using TemplateDN = W<ADReal>;
+using TemplateDN = W<DualReal>;
 
-typedef TemplateDN<VectorValue> ADRealVectorValue;
-typedef TemplateDN<TensorValue> ADRealTensorValue;
+typedef TemplateDN<VectorValue> DualRealVectorValue;
+typedef TemplateDN<TensorValue> DualRealTensorValue;
 
-typedef ADRealVectorValue ADRealGradient;
-typedef ADRealTensorValue ADRealTensor;
-
-namespace libMesh
-{
-template <typename T, typename T2, typename D>
-struct CompareTypes<T, DualNumber<T2, D>>
-{
-  typedef DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other>
-      supertype;
-};
-template <typename T, typename D, typename T2>
-struct CompareTypes<DualNumber<T, D>, T2>
-{
-  typedef DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other>
-      supertype;
-};
-template <typename T, typename D, typename T2, typename D2>
-struct CompareTypes<DualNumber<T, D>, DualNumber<T2, D2>>
-{
-  typedef DualNumber<typename CompareTypes<T, T2>::supertype,
-                     typename D::template rebind<typename CompareTypes<T, T2>::supertype>::other>
-      supertype;
-};
-template <typename T, typename D>
-struct CompareTypes<DualNumber<T, D>, DualNumber<T, D>>
-{
-  typedef DualNumber<T, D> supertype;
-};
-template <typename T, typename D>
-struct ScalarTraits<DualNumber<T, D>>
-{
-  static const bool value = ScalarTraits<T>::value;
-};
-}
+typedef DualRealVectorValue DualRealGradient;
+typedef DualRealTensorValue ADRealTensor;
 
 enum ComputeStage
 {
@@ -217,66 +203,165 @@ enum ComputeStage
   JACOBIAN
 };
 
+namespace Moose
+{
 template <ComputeStage compute_stage>
-struct VariableValueType
-{
-  typedef VariableValue type;
-};
-template <>
-struct VariableValueType<JACOBIAN>
-{
-  typedef MooseArray<ADReal> type;
-};
-template <ComputeStage compute_stage>
-struct VariableGradientType
-{
-  typedef VariableGradient type;
-};
-template <>
-struct VariableGradientType<JACOBIAN>
-{
-  typedef MooseArray<ADRealGradient> type;
-};
-template <ComputeStage compute_stage>
-struct VariableSecondType
-{
-  typedef VariableSecond type;
-};
-template <>
-struct VariableSecondType<JACOBIAN>
-{
-  typedef MooseArray<ADRealTensor> type;
-};
-template <ComputeStage compute_stage>
-struct ResidualReturnType
+struct RealType
 {
   typedef Real type;
 };
 template <>
-struct ResidualReturnType<JACOBIAN>
+struct RealType<JACOBIAN>
 {
-  typedef ADReal type;
+  typedef DualReal type;
 };
-template <ComputeStage compute_stage, typename mat_prop_type>
+
+template <typename T, ComputeStage compute_stage>
+struct ValueType;
+template <ComputeStage compute_stage>
+struct ValueType<Real, compute_stage>
+{
+  typedef typename RealType<compute_stage>::type type;
+};
+
+template <ComputeStage compute_stage, template <typename> class W>
+struct ValueType<W<Real>, compute_stage>
+{
+  typedef W<typename RealType<compute_stage>::type> type;
+};
+} // MOOSE
+
+template <typename T, ComputeStage compute_stage>
+struct VariableValueType
+{
+  typedef
+      typename OutputTools<typename Moose::ValueType<T, compute_stage>::type>::VariableValue type;
+};
+template <typename T, ComputeStage compute_stage>
+struct VariableGradientType
+{
+  typedef typename OutputTools<typename Moose::ValueType<T, compute_stage>::type>::VariableGradient
+      type;
+};
+template <typename T, ComputeStage compute_stage>
+struct VariableTestGradientType
+{
+  typedef
+      typename OutputTools<typename Moose::ValueType<T, compute_stage>::type>::VariableTestGradient
+          type;
+};
+template <typename T, ComputeStage compute_stage>
+struct VariableSecondType
+{
+  typedef
+      typename OutputTools<typename Moose::ValueType<T, compute_stage>::type>::VariableSecond type;
+};
+template <typename T, ComputeStage compute_stage>
+struct VariablePhiGradientType
+{
+  typedef
+      typename OutputTools<typename Moose::ValueType<T, compute_stage>::type>::VariablePhiGradient
+          type;
+};
+
+template <ComputeStage compute_stage>
+struct RealVectorValueType
+{
+  typedef RealVectorValue type;
+};
+template <>
+struct RealVectorValueType<JACOBIAN>
+{
+  typedef DualRealVectorValue type;
+};
+template <ComputeStage compute_stage>
+struct RealTensorValueType
+{
+  typedef RealTensorValue type;
+};
+template <>
+struct RealTensorValueType<JACOBIAN>
+{
+  typedef DualRealTensorValue type;
+};
+template <ComputeStage compute_stage>
+struct RankTwoTensorType
+{
+  typedef RankTwoTensor type;
+};
+template <>
+struct RankTwoTensorType<JACOBIAN>
+{
+  typedef DualRankTwoTensor type;
+};
+template <ComputeStage compute_stage>
+struct RankFourTensorType
+{
+  typedef RankFourTensor type;
+};
+template <>
+struct RankFourTensorType<JACOBIAN>
+{
+  typedef DualRankFourTensor type;
+};
+
+template <ComputeStage compute_stage>
+struct ResidualReturnType
+{
+  typedef typename Moose::RealType<compute_stage>::type type;
+};
+
+template <typename mat_prop_type, ComputeStage compute_stage>
 struct MaterialPropertyType
 {
   typedef MaterialProperty<mat_prop_type> type;
 };
 template <typename mat_prop_type>
-struct MaterialPropertyType<JACOBIAN, mat_prop_type>
+struct MaterialPropertyType<mat_prop_type, JACOBIAN>
 {
   typedef ADMaterialPropertyObject<mat_prop_type> type;
 };
 
+template <ComputeStage compute_stage>
+struct PointType
+{
+  typedef MooseArray<Point> type;
+};
+template <>
+struct PointType<JACOBIAN>
+{
+  typedef MooseArray<VectorValue<DualReal>> type;
+};
+
 #define ADResidual typename ResidualReturnType<compute_stage>::type
-#define ADVariableValue typename VariableValueType<compute_stage>::type
-#define ADVariableGradient typename VariableGradientType<compute_stage>::type
-#define ADVariableSecond typename VariableSecondType<compute_stage>::type
-#define ADMaterialProperty(Type) typename MaterialPropertyType<compute_stage, Type>::type
+#define ADGradResidual typename RealVectorValueType<compute_stage>::type
+
+#define ADVariableValue typename VariableValueType<Real, compute_stage>::type
+#define ADVariableGradient typename VariableGradientType<Real, compute_stage>::type
+#define ADVariableSecond typename VariableSecondType<Real, compute_stage>::type
+
+#define ADVectorVariableValue typename VariableValueType<RealVectorValue, compute_stage>::type
+#define ADVectorVariableGradient typename VariableGradientType<RealVectorValue, compute_stage>::type
+#define ADVectorVariableSecond typename VariableSecondType<RealVectorValue, compute_stage>::type
+
+#define ADTemplateVariableValue typename VariableValueType<T, compute_stage>::type
+#define ADTemplateVariableGradient typename VariableGradientType<T, compute_stage>::type
+#define ADTemplateVariableSecond typename VariableSecondType<T, compute_stage>::type
+
+#define ADTemplateVariablePhiGradient typename VariablePhiGradientType<T, compute_stage>::type
+#define ADVariablePhiGradient typename VariablePhiGradientType<Real, compute_stage>::type
+
+#define ADMaterialProperty(Type) typename MaterialPropertyType<Type, compute_stage>::type
 
 typedef VariableTestValue ADVariableTestValue;
 typedef VariableTestGradient ADVariableTestGradient;
 typedef VariableTestSecond ADVariableTestSecond;
+typedef VectorVariableTestValue ADVectorVariableTestValue;
+typedef VectorVariableTestGradient ADVectorVariableTestGradient;
+typedef VectorVariableTestSecond ADVectorVariableTestSecond;
+#define ADTemplateVariableTestValue typename OutputTools<T>::VariableTestValue
+#define ADTemplateVariableTestSecond typename OutputTools<T>::VariableTestSecond
+#define ADTemplateVariablePhiValue typename OutputTools<T>::VariablePhiValue
 
 #define declareADValidParams(ADObjectType)                                                         \
   template <>                                                                                      \
@@ -314,12 +399,27 @@ typedef VariableTestSecond ADVariableTestSecond;
   }                                                                                                \
   void mooseClangFormatFunction()
 
+#define defineADValidParamsFromEmpty(ADObjectType, addedParamCode)                                 \
+  template <>                                                                                      \
+  InputParameters validParams<ADObjectType<RESIDUAL>>()                                            \
+  {                                                                                                \
+    InputParameters params = emptyInputParameters();                                               \
+    addedParamCode;                                                                                \
+    return params;                                                                                 \
+  }                                                                                                \
+  template <>                                                                                      \
+  InputParameters validParams<ADObjectType<JACOBIAN>>()                                            \
+  {                                                                                                \
+    return validParams<ADObjectType<RESIDUAL>>();                                                  \
+  }                                                                                                \
+  void mooseClangFormatFunction()
+
 namespace Moose
 {
-const SubdomainID ANY_BLOCK_ID = libMesh::Elem::invalid_subdomain_id - 1;
-const SubdomainID INVALID_BLOCK_ID = libMesh::Elem::invalid_subdomain_id;
-const BoundaryID ANY_BOUNDARY_ID = static_cast<BoundaryID>(-1);
-const BoundaryID INVALID_BOUNDARY_ID = libMesh::BoundaryInfo::invalid_id;
+extern const SubdomainID ANY_BLOCK_ID;
+extern const SubdomainID INVALID_BLOCK_ID;
+extern const BoundaryID ANY_BOUNDARY_ID;
+extern const BoundaryID INVALID_BOUNDARY_ID;
 const std::set<SubdomainID> EMPTY_BLOCK_IDS = {};
 const std::set<BoundaryID> EMPTY_BOUNDARY_IDS = {};
 
@@ -507,6 +607,7 @@ enum TimeIntegratorType
   TI_EXPLICIT_MIDPOINT,
   TI_LSTABLE_DIRK2,
   TI_EXPLICIT_TVD_RK_2,
+  TI_NEWMARK_BETA
 };
 
 /**
@@ -574,7 +675,7 @@ enum class RelationshipManagerType : unsigned char
 };
 
 std::string stringify(const Moose::RelationshipManagerType & t);
-}
+} // namespace Moose
 
 namespace libMesh
 {
@@ -682,5 +783,8 @@ DerivativeStringClass(MaterialName);
 
 /// Tag Name
 DerivativeStringClass(TagName);
+
+/// Name of MeshGenerators
+DerivativeStringClass(MeshGeneratorName);
 
 #endif // MOOSETYPES_H
