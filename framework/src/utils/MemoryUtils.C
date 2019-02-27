@@ -8,6 +8,7 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MemoryUtils.h"
+#include "MooseError.h"
 
 #include <unistd.h>
 #include <mpi.h>
@@ -18,6 +19,7 @@
 #include <mach/task.h>
 #include <mach/clock.h>
 #include <mach/mach.h>
+#include <mach/vm_page_size.h>
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #include <sys/vmmeter.h>
@@ -27,6 +29,26 @@
 
 namespace MemoryUtils
 {
+
+std::string
+getMPIProcessorName()
+{
+#ifdef LIBMESH_HAVE_MPI
+  int mpi_namelen;
+  char mpi_name[MPI_MAX_PROCESSOR_NAME];
+  MPI_Get_processor_name(mpi_name, &mpi_namelen);
+  return mpi_name;
+#else
+  return "serial";
+#endif
+}
+
+MooseEnum
+getMemUnitsEnum()
+{
+  return MooseEnum("bytes kibibytes mebibytes gibibytes kilobytes megabytes gigabytes",
+                   "mebibytes");
+}
 
 std::size_t
 getTotalRAM()
@@ -42,19 +64,6 @@ getTotalRAM()
     return si_data.totalram * si_data.mem_unit;
 #endif
   return 0;
-}
-
-std::string
-getMPIProcessorName()
-{
-#ifdef LIBMESH_HAVE_MPI
-  int mpi_namelen;
-  char mpi_name[MPI_MAX_PROCESSOR_NAME];
-  MPI_Get_processor_name(mpi_name, &mpi_namelen);
-  return mpi_name;
-#else
-  return "serial";
-#endif
 }
 
 void
@@ -96,9 +105,11 @@ getMemoryStats(Stats & stats)
                                   reinterpret_cast<task_info_t>(&t_info),
                                   &t_info_count))
     {
-      val[index_virtual_size] = t_info.virtual_size;
-      val[index_resident_size] = t_info.resident_size;
+      val[index_virtual_size] = t_info.virtual_size;   // in bytes
+      val[index_resident_size] = t_info.resident_size; // in bytes
     }
+    else
+      mooseDoOnce(::mooseWarning("task_info call failed, memory usage numbers will be incorrect"));
 #endif
   }
 
@@ -110,6 +121,29 @@ getMemoryStats(Stats & stats)
 
   // page faults
   stats._page_faults = val[index_page_faults];
+}
+
+std::size_t
+convertBytes(std::size_t bytes, MemUnits unit)
+{
+  if (unit == MemUnits::Bytes)
+    return bytes;
+
+  unsigned int nunit = static_cast<unsigned int>(unit);
+
+  // kibi, mebi, gibi
+  if (nunit <= 3)
+    return bytes >> (nunit * 10);
+
+  // kilo, mega, giga
+  if (nunit <= 6)
+  {
+    while (nunit-- > 3)
+      bytes /= 1000;
+    return bytes;
+  }
+
+  mooseError("Unknown memory unit");
 }
 
 } // namespace MemoryUtils

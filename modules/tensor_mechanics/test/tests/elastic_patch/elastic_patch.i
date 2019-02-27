@@ -148,11 +148,20 @@
     order = CONSTANT
     family = MONOMIAL
   [../]
+  [./max_shear]
+    order = CONSTANT
+    family = MONOMIAL
+  [../]
+  [./sint]
+    order = CONSTANT
+    family = MONOMIAL
+  [../]
 
 [] # AuxVariables
 
 [Kernels]
   [./TensorMechanics]
+    use_displaced_mesh = true
   [../]
 []
 
@@ -258,6 +267,18 @@
     variable = direction
     scalar_type = direction
     direction = '1 1 1'
+  [../]
+  [./max_shear]
+    type = RankTwoScalarAux
+    rank_two_tensor = stress
+    variable = max_shear
+    scalar_type = MaxShear
+  [../]
+  [./sint]
+    type = RankTwoScalarAux
+    rank_two_tensor = stress
+    variable = sint
+    scalar_type = StressIntensity
   [../]
 
 

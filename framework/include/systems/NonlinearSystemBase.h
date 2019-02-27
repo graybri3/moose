@@ -32,7 +32,7 @@ class GeometricSearchData;
 class IntegratedBCBase;
 class NodalBCBase;
 class PresetNodalBC;
-class DGKernel;
+class DGKernelBase;
 class InterfaceKernel;
 class ScalarKernel;
 class DiracKernel;
@@ -48,7 +48,7 @@ template <typename T>
 class NumericVector;
 template <typename T>
 class SparseMatrix;
-}
+} // namespace libMesh
 
 /**
  * Nonlinear system to be solved
@@ -114,8 +114,16 @@ public:
    * @param name The name of the integrator
    * @param parameters Integrator params
    */
-  void
-  addTimeIntegrator(const std::string & type, const std::string & name, InputParameters parameters);
+  void addTimeIntegrator(const std::string & type,
+                         const std::string & name,
+                         InputParameters parameters) override;
+  using SystemBase::addTimeIntegrator;
+
+  /**
+   * Add u_dot, u_dotdot, u_dot_old and u_dotdot_old
+   * vectors if requested by the time integrator
+   */
+  void addDotVectors();
 
   /**
    * Adds a kernel
@@ -346,7 +354,16 @@ public:
    */
   virtual void setSolutionUDot(const NumericVector<Number> & udot);
 
-  virtual NumericVector<Number> & solutionUDot() override;
+  /**
+   * Set transient term used by residual and Jacobian evaluation.
+   * @param udotdot transient term
+   * @note If the calling sequence for residual evaluation was changed, this could become an
+   * explicit argument.
+   */
+  virtual void setSolutionUDotDot(const NumericVector<Number> & udotdot);
+
+  virtual NumericVector<Number> * solutionUDot() override { return _u_dot; }
+  virtual NumericVector<Number> * solutionUDotDot() override { return _u_dotdot; }
 
   /**
    *  Return a numeric vector that is associated with the time tag.
@@ -491,8 +508,6 @@ public:
   void setPredictor(std::shared_ptr<Predictor> predictor);
   Predictor * getPredictor() { return _predictor.get(); }
 
-  TimeIntegrator * getTimeIntegrator() { return _time_integrator.get(); }
-
   void setPCSide(MooseEnum pcs);
 
   Moose::PCSideType getPCSide() { return _pc_side; }
@@ -523,19 +538,17 @@ public:
    * Access functions to Warehouses from outside NonlinearSystemBase
    */
   MooseObjectTagWarehouse<KernelBase> & getKernelWarehouse() { return _kernels; }
-  const MooseObjectWarehouse<DGKernel> & getDGKernelWarehouse() { return _dg_kernels; }
-  const MooseObjectWarehouse<InterfaceKernel> & getInterfaceKernelWarehouse()
+  MooseObjectTagWarehouse<KernelBase> & getADJacobianKernelWarehouse()
+  {
+    return _ad_jacobian_kernels;
+  }
+  MooseObjectTagWarehouse<DGKernelBase> & getDGKernelWarehouse() { return _dg_kernels; }
+  MooseObjectTagWarehouse<InterfaceKernel> & getInterfaceKernelWarehouse()
   {
     return _interface_kernels;
   }
-  const MooseObjectWarehouse<DiracKernel> & getDiracKernelWarehouse() const
-  {
-    return _dirac_kernels;
-  }
-  const MooseObjectWarehouse<IntegratedBCBase> & getIntegratedBCWarehouse() const
-  {
-    return _integrated_bcs;
-  }
+  MooseObjectTagWarehouse<DiracKernel> & getDiracKernelWarehouse() { return _dirac_kernels; }
+  MooseObjectTagWarehouse<IntegratedBCBase> & getIntegratedBCWarehouse() { return _integrated_bcs; }
   const MooseObjectWarehouse<ElementDamper> & getElementDamperWarehouse() const
   {
     return _element_dampers;
@@ -562,10 +575,18 @@ public:
   virtual System & system() override { return _sys; }
   virtual const System & system() const override { return _sys; }
 
+  virtual NumericVector<Number> * solutionUDotOld() override { return _u_dot_old; }
+
+  virtual NumericVector<Number> * solutionUDotDotOld() override { return _u_dotdot_old; }
+
   virtual NumericVector<Number> * solutionPreviousNewton() override
   {
     return _solution_previous_nl;
   }
+
+  virtual void setSolutionUDotOld(const NumericVector<Number> & u_dot_old);
+
+  virtual void setSolutionUDotDotOld(const NumericVector<Number> & u_dotdot_old);
 
   virtual void setPreviousNewtonSolution(const NumericVector<Number> & soln);
 
@@ -618,9 +639,9 @@ protected:
    */
   void computeJacobianInternal(const std::set<TagID> & tags);
 
-  void computeDiracContributions(bool is_jacobian);
+  void computeDiracContributions(const std::set<TagID> & tags, bool is_jacobian);
 
-  void computeScalarKernelsJacobians();
+  void computeScalarKernelsJacobians(const std::set<TagID> & tags);
 
   /**
    * Enforce nodal constraints
@@ -642,13 +663,20 @@ protected:
   /// Copy of the residual vector
   NumericVector<Number> & _residual_copy;
 
-  /// Time integrator
-  std::shared_ptr<TimeIntegrator> _time_integrator;
-
   /// solution vector for u^dot
   NumericVector<Number> * _u_dot;
+  /// solution vector for u^dotdot
+  NumericVector<Number> * _u_dotdot;
+
+  /// old solution vector for u^dot
+  NumericVector<Number> * _u_dot_old;
+  /// old solution vector for u^dotdot
+  NumericVector<Number> * _u_dotdot_old;
+
   /// \f$ {du^dot}\over{du} \f$
   Number _du_dot_du;
+  /// \f$ {du^dotdot}\over{du} \f$
+  Number _du_dotdot_du;
 
   /// Tag for time contribution residual
   TagID _Re_time_tag;
@@ -679,23 +707,22 @@ protected:
   ///@{
   /// Kernel Storage
   MooseObjectTagWarehouse<KernelBase> _kernels;
-  MooseObjectWarehouse<ScalarKernel> _scalar_kernels;
-  MooseObjectWarehouse<ScalarKernel> _time_scalar_kernels;
-  MooseObjectWarehouse<ScalarKernel> _non_time_scalar_kernels;
-  MooseObjectWarehouse<DGKernel> _dg_kernels;
-  MooseObjectWarehouse<InterfaceKernel> _interface_kernels;
+  MooseObjectTagWarehouse<KernelBase> _ad_jacobian_kernels;
+  MooseObjectTagWarehouse<ScalarKernel> _scalar_kernels;
+  MooseObjectTagWarehouse<DGKernelBase> _dg_kernels;
+  MooseObjectTagWarehouse<InterfaceKernel> _interface_kernels;
 
   ///@}
 
   ///@{
   /// BoundaryCondition Warhouses
-  MooseObjectWarehouse<IntegratedBCBase> _integrated_bcs;
+  MooseObjectTagWarehouse<IntegratedBCBase> _integrated_bcs;
   MooseObjectTagWarehouse<NodalBCBase> _nodal_bcs;
   MooseObjectWarehouse<PresetNodalBC> _preset_nodal_bcs;
   ///@}
 
   /// Dirac Kernel storage for each thread
-  MooseObjectWarehouse<DiracKernel> _dirac_kernels;
+  MooseObjectTagWarehouse<DiracKernel> _dirac_kernels;
 
   /// Element Dampers for each thread
   MooseObjectWarehouse<ElementDamper> _element_dampers;
@@ -707,7 +734,7 @@ protected:
   MooseObjectWarehouse<GeneralDamper> _general_dampers;
 
   /// NodalKernels for each thread
-  MooseObjectWarehouse<NodalKernel> _nodal_kernels;
+  MooseObjectTagWarehouse<NodalKernel> _nodal_kernels;
 
   /// Decomposition splits
   MooseObjectWarehouseBase<Split> _splits; // use base b/c there are no setup methods

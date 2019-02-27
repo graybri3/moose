@@ -6,7 +6,7 @@ The Tensor Mechanics module is a library of simulation tools that solve
 continuum mechanics problems. It provides a simple approach for implementing
 even advanced mechanics models:
 
-- Plug-n-play design enables users to encorporate the relevant physics for specific and varied simulations
+- Plug-n-play design enables users to incorporate the relevant physics for specific and varied simulations
 - Tensor implementation matches mathematical theory
 - Straight-forward procedure for adding new physics
 
@@ -44,7 +44,7 @@ to learn more about the tensor mechanics module and to get started with your own
 continuum mechanics and combined physics simulations.
 
 !row!
-!col! class=s12 m4 l4 icon=device_hub
+!col! small=12 medium=4 large=4 icon=device_hub
 
 ### Plug-n-Play Structure Overview class=center style=font-weight:200;
 
@@ -60,7 +60,7 @@ These types of code classes make up the core of the tensor mechanics module.
 
 !col-end!
 
-!col! class=s12 m4 l4 icon=school
+!col! small=12 medium=4 large=4 icon=school
 
 ### Examples and Tutorials class=center style=font-weight:200;
 
@@ -75,7 +75,7 @@ Now you're ready to start creating your own mechanics simulations.
 
 !col-end!
 
-!col! class=s12 m4 l4 icon=storage
+!col! small=12 medium=4 large=4 icon=storage
 
 ### Advanced Features class=center style=font-weight:200;
 
@@ -96,7 +96,7 @@ introductory theory pages on the various models:
 
 The tensor mechanics module is being developed by users at national laboratories
 and universities around the world. Contact the developers through the
-[moose-users email list](help/contact_us.md).
+[moose-users email list](help/contact_us.md optional=True).
 
 ## Developing New Tensor Mechanics Code
 
@@ -104,4 +104,4 @@ Consider becoming a developer yourself.
 The tensor mechanics module uses code syntax based on tensor forms. This approach
 allows the constitutive tensor equations to be implemented, clearly and concisely,
 in the same format as written in mathematical notation.
-Follow the MOOSE standards for [contributing code and documentation](utilities/MooseDocs/generate.md).
+Follow the MOOSE standards for [contributing code and documentation](MooseDocs/generate.md optional=True).

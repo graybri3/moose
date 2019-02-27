@@ -17,6 +17,9 @@ class NaClFluidProperties;
 template <>
 InputParameters validParams<NaClFluidProperties>();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+
 /**
  * NaCl fluid properties as a function of pressure (Pa) and temperature (K).
  * Note: only solid state (halite) properties are currently implemented to
@@ -68,31 +71,11 @@ public:
   virtual void
   e_from_p_T(Real pressure, Real temperature, Real & e, Real & de_dp, Real & de_dT) const override;
 
-  virtual void rho_e_dpT(Real pressure,
-                         Real temperature,
-                         Real & rho,
-                         Real & drho_dp,
-                         Real & drho_dT,
-                         Real & e,
-                         Real & de_dp,
-                         Real & de_dT) const override;
-
-  virtual Real c_from_p_T(Real pressure, Real temperature) const override;
-
   virtual Real cp_from_p_T(Real pressure, Real temperature) const override;
 
+  using SinglePhaseFluidProperties::cp_from_p_T;
+
   virtual Real cv_from_p_T(Real pressure, Real temperature) const override;
-
-  virtual void rho_mu(Real pressure, Real temperature, Real & rho, Real & mu) const override;
-
-  virtual void rho_mu_dpT(Real pressure,
-                          Real temperature,
-                          Real & rho,
-                          Real & drho_dp,
-                          Real & drho_dT,
-                          Real & mu,
-                          Real & dmu_dp,
-                          Real & dmu_dT) const override;
 
   virtual Real k_from_p_T(Real pressure, Real temperature) const override;
 
@@ -118,5 +101,7 @@ protected:
   /// Triple point temperature (K)
   const Real _T_triple;
 };
+
+#pragma GCC diagnostic pop
 
 #endif /* NACLFLUIDPROPERTIES_H */

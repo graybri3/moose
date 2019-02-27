@@ -17,23 +17,30 @@
 // libmesh includes
 #include "libmesh/threads.h"
 
-defineADBaseValidParams(ADKernel, KernelBase, params.registerBase("ADKernel"););
+defineADBaseValidParams(ADKernel, KernelBase, params.registerBase("Kernel"););
+defineADBaseValidParams(ADVectorKernel, KernelBase, params.registerBase("VectorKernel"););
 
-template <ComputeStage compute_stage>
-ADKernel<compute_stage>::ADKernel(const InputParameters & parameters)
+template <typename T, ComputeStage compute_stage>
+ADKernelTempl<T, compute_stage>::ADKernelTempl(const InputParameters & parameters)
   : KernelBase(parameters),
-    MooseVariableInterface<Real>(this,
-                                 false,
-                                 "variable",
-                                 Moose::VarKindType::VAR_NONLINEAR,
-                                 Moose::VarFieldType::VAR_FIELD_STANDARD),
-    _var(*mooseVariable()),
+    MooseVariableInterface<T>(this,
+                              false,
+                              "variable",
+                              Moose::VarKindType::VAR_NONLINEAR,
+                              std::is_same<T, Real>::value ? Moose::VarFieldType::VAR_FIELD_STANDARD
+                                                           : Moose::VarFieldType::VAR_FIELD_VECTOR),
+    _var(*this->mooseVariable()),
     _test(_var.phi()),
-    _grad_test(_var.gradPhi()),
-    _u(_var.adSln<compute_stage>()),
-    _grad_u(_var.adGradSln<compute_stage>())
+    _grad_test(_var.template adGradPhi<compute_stage>()),
+    _u(_var.template adSln<compute_stage>()),
+    _grad_u(_var.template adGradSln<compute_stage>()),
+    _ad_JxW(_assembly.adJxW<compute_stage>()),
+    _ad_coord(_assembly.adCoordTransformation<compute_stage>()),
+    _ad_q_point(_assembly.template adQPoints<compute_stage>()),
+    _phi(_assembly.phi(_var)),
+    _grad_phi(_assembly.template adGradPhi<T, compute_stage>(_var))
 {
-  addMooseVariableDependency(mooseVariable());
+  addMooseVariableDependency(this->mooseVariable());
   _save_in.resize(_save_in_strings.size());
   _diag_save_in.resize(_diag_save_in_strings.size());
 
@@ -78,24 +85,23 @@ ADKernel<compute_stage>::ADKernel(const InputParameters & parameters)
   _has_diag_save_in = _diag_save_in.size() > 0;
 }
 
-template <ComputeStage compute_stage>
-ADKernel<compute_stage>::~ADKernel()
+template <typename T, ComputeStage compute_stage>
+ADKernelTempl<T, compute_stage>::~ADKernelTempl()
 {
 }
 
-template <ComputeStage compute_stage>
+template <typename T, ComputeStage compute_stage>
 void
-ADKernel<compute_stage>::computeResidual()
+ADKernelTempl<T, compute_stage>::computeResidual()
 {
-  DenseVector<Number> & re = _assembly.residualBlock(_var.number());
-  _local_re.resize(re.size());
-  _local_re.zero();
+  prepareVectorTag(_assembly, _var.number());
 
+  precalculateResidual();
   for (_i = 0; _i < _test.size(); _i++)
     for (_qp = 0; _qp < _qrule->n_points(); _qp++)
-      _local_re(_i) += _JxW[_qp] * _coord[_qp] * computeQpResidual();
+      _local_re(_i) += _ad_JxW[_qp] * _ad_coord[_qp] * computeQpResidual();
 
-  re += _local_re;
+  accumulateTaggedLocalResidual();
 
   if (_has_save_in)
   {
@@ -107,36 +113,40 @@ ADKernel<compute_stage>::computeResidual()
 
 template <>
 void
-ADKernel<JACOBIAN>::computeResidual()
+ADKernelTempl<Real, JACOBIAN>::computeResidual()
 {
 }
 
-template <ComputeStage compute_stage>
+template <>
 void
-ADKernel<compute_stage>::computeJacobian()
+ADKernelTempl<RealVectorValue, JACOBIAN>::computeResidual()
 {
-  DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), _var.number());
-  _local_ke.resize(ke.m(), ke.n());
-  _local_ke.zero();
+}
+
+template <typename T, ComputeStage compute_stage>
+void
+ADKernelTempl<T, compute_stage>::computeJacobian()
+{
+  prepareMatrixTag(_assembly, _var.number(), _var.number());
 
   size_t ad_offset = _var.number() * _sys.getMaxVarNDofsPerElem();
 
+  precalculateResidual();
   for (_i = 0; _i < _test.size(); _i++)
   {
     for (_qp = 0; _qp < _qrule->n_points(); _qp++)
     {
-      ADReal residual =
-          computeQpResidual(); // This will also compute the derivative with respect to all dofs
+      DualReal residual = _ad_JxW[_qp] * _ad_coord[_qp] * computeQpResidual();
       for (_j = 0; _j < _var.phiSize(); _j++)
-        _local_ke(_i, _j) += _JxW[_qp] * _coord[_qp] * residual.derivatives()[ad_offset + _j];
+        _local_ke(_i, _j) += residual.derivatives()[ad_offset + _j];
     }
   }
 
-  ke += _local_ke;
+  accumulateTaggedLocalMatrix();
 
   if (_has_diag_save_in)
   {
-    unsigned int rows = ke.m();
+    unsigned int rows = _local_ke.m();
     DenseVector<Number> diag(rows);
     for (unsigned int i = 0; i < rows; i++)
       diag(i) = _local_ke(i, i);
@@ -149,58 +159,68 @@ ADKernel<compute_stage>::computeJacobian()
 
 template <>
 void
-ADKernel<RESIDUAL>::computeJacobian()
+ADKernelTempl<Real, RESIDUAL>::computeJacobian()
+{
+}
+template <>
+void
+ADKernelTempl<RealVectorValue, RESIDUAL>::computeJacobian()
 {
 }
 
-template <ComputeStage compute_stage>
+template <typename T, ComputeStage compute_stage>
 void
-ADKernel<compute_stage>::computeOffDiagJacobian(MooseVariableFEBase & jvar)
+ADKernelTempl<T, compute_stage>::computeOffDiagJacobian(MooseVariableFEBase &)
 {
-  auto jvar_num = jvar.number();
+}
 
-  if (jvar_num == _var.number())
-    computeJacobian();
-  else
-  {
-    size_t ad_offset = jvar_num * _sys.getMaxVarNDofsPerElem();
+template <typename T, ComputeStage compute_stage>
+void
+ADKernelTempl<T, compute_stage>::computeADOffDiagJacobian()
+{
+  std::vector<DualReal> residuals(_test.size(), 0);
 
-    DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), jvar_num);
-
+  precalculateResidual();
+  for (_qp = 0; _qp < _qrule->n_points(); _qp++)
     for (_i = 0; _i < _test.size(); _i++)
-    {
-      for (_qp = 0; _qp < _qrule->n_points(); _qp++)
-      {
-        ADReal residual =
-            computeQpResidual(); // This will also compute the derivative with respect to all dofs
+      residuals[_i] += _ad_JxW[_qp] * _ad_coord[_qp] * computeQpResidual();
 
-        for (_j = 0; _j < jvar.phiSize(); _j++)
-          ke(_i, _j) += _JxW[_qp] * _coord[_qp] * residual.derivatives()[ad_offset + _j];
-      }
-    }
+  std::vector<std::pair<MooseVariableFEBase *, MooseVariableFEBase *>> & ce =
+      _assembly.couplingEntries();
+  for (const auto & it : ce)
+  {
+    MooseVariableFEBase & ivariable = *(it.first);
+    MooseVariableFEBase & jvariable = *(it.second);
+
+    unsigned int ivar = ivariable.number();
+    unsigned int jvar = jvariable.number();
+
+    if (ivar != _var.number())
+      continue;
+
+    size_t ad_offset = jvar * _sys.getMaxVarNDofsPerElem();
+
+    prepareMatrixTag(_assembly, ivar, jvar);
+
+    if (_local_ke.m() != _test.size() || _local_ke.n() != jvariable.phiSize())
+      continue;
+
+    precalculateResidual();
+    for (_i = 0; _i < _test.size(); _i++)
+      for (_j = 0; _j < jvariable.phiSize(); _j++)
+        _local_ke(_i, _j) += residuals[_i].derivatives()[ad_offset + _j];
+
+    accumulateTaggedLocalMatrix();
   }
 }
 
-template <>
+template <typename T, ComputeStage compute_stage>
 void
-ADKernel<RESIDUAL>::computeOffDiagJacobian(MooseVariableFEBase &)
+ADKernelTempl<T, compute_stage>::computeOffDiagJacobianScalar(unsigned int /*jvar*/)
 {
 }
 
-template <ComputeStage compute_stage>
-void
-ADKernel<compute_stage>::computeOffDiagJacobianScalar(unsigned int /*jvar*/)
-{
-  /*
-  DenseMatrix<Number> & ke = _assembly.jacobianBlock(_var.number(), jvar);
-  MooseVariableScalar & jv = _sys.getScalarVariable(_tid, jvar);
-
-  for (_i = 0; _i < _test.size(); _i++)
-    for (_j = 0; _j < jv.order(); _j++)
-      for (_qp = 0; _qp < _qrule->n_points(); _qp++)
-        ke(_i, _j) += _JxW[_qp] * _coord[_qp] * computeQpOffDiagJacobian(jvar);
-  */
-}
-
-template class ADKernel<RESIDUAL>;
-template class ADKernel<JACOBIAN>;
+template class ADKernelTempl<Real, RESIDUAL>;
+template class ADKernelTempl<Real, JACOBIAN>;
+template class ADKernelTempl<RealVectorValue, RESIDUAL>;
+template class ADKernelTempl<RealVectorValue, JACOBIAN>;

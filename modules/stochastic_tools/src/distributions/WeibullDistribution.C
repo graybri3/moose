@@ -8,6 +8,8 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "WeibullDistribution.h"
+#include "math.h"
+#include "libmesh/utility.h"
 
 registerMooseObject("StochasticToolsApp", WeibullDistribution);
 
@@ -16,15 +18,74 @@ InputParameters
 validParams<WeibullDistribution>()
 {
   InputParameters params = validParams<Distribution>();
-  params.addClassDescription("Boost Weibull distribution.");
-  params.addRequiredParam<Real>("shape", "The Weibull shape parameter.");
-  params.addParam<Real>("scale", 1, "The Weibull scale parameter.");
+  params.addClassDescription("Three-parameter Weibull distribution.");
+  params.addRequiredParam<Real>("location", "Location parameter (a or low)");
+  params.addRequiredRangeCheckedParam<Real>("scale", "scale > 0", "Scale parameter (b or lambda)");
+  params.addRequiredRangeCheckedParam<Real>("shape", "shape > 0", "Shape parameter (c or k)");
   return params;
 }
 
 WeibullDistribution::WeibullDistribution(const InputParameters & parameters)
-  : BoostDistribution<boost::math::weibull_distribution<Real>>(parameters)
+  : Distribution(parameters),
+    _a(getParam<Real>("location")),
+    _b(getParam<Real>("scale")),
+    _c(getParam<Real>("shape"))
 {
-  _distribution_unique_ptr = libmesh_make_unique<boost::math::weibull_distribution<Real>>(
-      getParam<Real>("shape"), getParam<Real>("scale"));
+}
+
+Real
+WeibullDistribution::pdf(const Real & x,
+                         const Real & location,
+                         const Real & scale,
+                         const Real & shape) const
+{
+  if (x <= location)
+    return 0.0;
+  else
+  {
+    const Real y = (x - location) / scale;
+    return shape / scale * std::pow(y, shape - 1.0) * std::exp(-std::pow(y, shape));
+  }
+}
+
+Real
+WeibullDistribution::cdf(const Real & x,
+                         const Real & location,
+                         const Real & scale,
+                         const Real & shape) const
+{
+  if (x <= location)
+    return 0.0;
+  else
+  {
+    const Real y = (x - location) / scale;
+    return 1.0 - std::exp(-std::pow(y, shape));
+  }
+}
+
+Real
+WeibullDistribution::quantile(const Real & p,
+                              const Real & location,
+                              const Real & scale,
+                              const Real & shape) const
+{
+  return location + scale * std::pow(-std::log(1 - p), 1.0 / shape);
+}
+
+Real
+WeibullDistribution::pdf(const Real & x) const
+{
+  return pdf(x, _a, _b, _c);
+}
+
+Real
+WeibullDistribution::cdf(const Real & x) const
+{
+  return cdf(x, _a, _b, _c);
+}
+
+Real
+WeibullDistribution::quantile(const Real & p) const
+{
+  return quantile(p, _a, _b, _c);
 }

@@ -29,9 +29,6 @@
     type = Diffusion
     variable = w
   [../]
-[]
-
-[ADKernels]
   [./ad_coupled_value]
     type = ADCoupledValueTest
     variable = u
@@ -98,7 +95,6 @@
 [Executioner]
   type = Steady
 
-  # Preconditioned JFNK (default)
   solve_type = 'Newton'
 
   petsc_options_iname = '-pc_type -pc_hypre_type'

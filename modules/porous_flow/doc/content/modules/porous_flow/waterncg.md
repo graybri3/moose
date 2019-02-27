@@ -78,7 +78,7 @@ h_l = (1 - x_{ncg}) h_{h2o} + x_{ncg} (h_{ncg,g} + h_{dis,g}),
 
 where $h_{ncg,g}$ is the enthalpy of the gaseous NCG, and $h_{dis,g}$ is the enthalpy of
 dissolution of NCG into the liquid. An expression for the enthalpy of dissolution is
-implemented following [citep:himmelblau1959]
+implemented following [citep!himmelblau1959]
 
 \begin{equation}
 \frac{\partial \ln(K_h)}{\partial T} = - \frac{h_{dis,g} M_{ncg}}{R T^2},
@@ -114,10 +114,7 @@ Swapping NCG's is as simple as changing the `gas_fp` parameter in this UserObjec
 
 ### Materials
 
-The [`PorousFlowFluidStateWaterNCG`](/PorousFlowFluidStateWaterNCG.md)
-Material provides all phase pressures, saturation, densities, viscosities etc, as well
-as all mass fractions of all fluid components in all fluid phases in a single material
-using the formulation provided in the [`PorousFlowWaterNCG`](/PorousFlowWaterNCG.md) UserObject.
+The [`PorousFlowFluidState`](/PorousFlowFluidState.md) material provides all phase pressures, saturation, densities, viscosities etc, as well as all mass fractions of all fluid components in all fluid phases in a single material using the formulation provided in the [`PorousFlowWaterNCG`](/PorousFlowWaterNCG.md) UserObject.
 
 !listing modules/porous_flow/test/tests/fluidstate/theis.i block=Materials/waterncg
 
@@ -126,7 +123,7 @@ using the formulation provided in the [`PorousFlowWaterNCG`](/PorousFlowWaterNCG
 The nonlinear variable representing NCG is the total mass fraction of NCG summed over
 all phases. In some cases, it may be preferred to provide an initial NCG saturation, rather
 than total mass fraction. To allow an initial saturation to be specified, the
-[`PorousFlowFluidStateWaterNCGIC`](/PorousFlowFluidStateWaterNCGIC.md) initial
+[`PorousFlowFluidStateIC`](/PorousFlowFluidStateIC.md) initial
 condition is provided. This initial condition calculates the total mass fraction of NCG
 summed over all phases for a given saturation.
 

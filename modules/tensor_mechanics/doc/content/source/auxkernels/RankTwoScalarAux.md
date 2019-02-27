@@ -127,7 +127,7 @@ is used as the argument for the `variable` input parameter in the `RankTwoScalar
 ### First Invariant
 
 The scalar type `FirstInvariant` calculates the first invariant of the specified Rank-2 tensor,
-$T_{ij}$, according to [eq:first_invariant_scalar_type] from [cite:malvern1969introduction].
+$T_{ij}$, according to [eq:first_invariant_scalar_type] from [cite!malvern1969introduction].
 \begin{equation}
 \label{eq:first_invariant_scalar_type}
 I_T = Tr \left( T_{ij} \right) = T_{ii}
@@ -147,7 +147,7 @@ is used as the argument for the `variable` input parameter in the `RankTwoScalar
 
 Similarly, the scalar type `SecondInvariant` finds the second invariant of the Rank-2 tensor,
 $T_{ij}$, as shown in [eq:second_invariant_scalar_type].
-This method is defined in [cite:hjelmstad2007fundamentals].
+This method is defined in [cite!hjelmstad2007fundamentals].
 \begin{equation}
 \label{eq:second_invariant_scalar_type}
 II_T = T_{ii} T_{jj} - \frac{1}{2} \left( T_{ij} T_{ij} + T_{ji} T_{ji} \right)
@@ -167,7 +167,7 @@ is used as the argument for the `variable` input parameter in the `RankTwoScalar
 ### Third Invariant
 
 The scalar type `ThirdInvariant` computes the value of the Rank-2 tensor, $T_ij$, third invariant as
-given in [eq:third_invariant_scalar_type] from [cite:malvern1969introduction].
+given in [eq:third_invariant_scalar_type] from [cite!malvern1969introduction].
 \begin{equation}
 \label{eq:third_invariant_scalar_type}
 III_T = det \left( T_{ij} \right)  = \frac{1}{6} e_{ijk} e_{pqr} T_{ip} T_{jq} T_{kr}
@@ -192,6 +192,26 @@ The scalar type `L2Norm` calculates the L2 normal of a Rank-2 tensor, $T_{ij}$, 
 \label{eq:l2_norm_scalar_type}
 s = \sqrt{T_{ij} T_{ij}}
 \end{equation}
+
+## Maximum Shear Stress
+
+The scalar type `MaxShear` calculates the maximum shear stress for a Rank-2 tensor, as shown in
+[eq:maxshear_scalar_type].
+\begin{equation}
+\label{eq:maxshear_scalar_type}
+\sigma_{max}^{shear} = \frac{\sigma_{max}^{principal} - \sigma_{min}^{principal}}{2}
+\end{equation}
+
+#### Example Input File Syntax
+
+!listing modules/tensor_mechanics/test/tests/elastic_patch/elastic_patch.i
+         block=AuxKernels/max_shear
+
+An AuxVariable is required to store the AuxKernel information. Note that the name of the AuxVariable
+is used as the argument for the `variable` input parameter in the `RankTwoScalarAux` block.
+
+!listing modules/tensor_mechanics/test/tests/elastic_patch/elastic_patch.i
+         block=AuxVariables/max_shear
 
 ## Principal Values
 
@@ -267,6 +287,29 @@ is used as the argument for the `variable` input parameter in the `RankTwoScalar
 !listing modules/porous_flow/test/tests/thm_rehbinder/free_outer.i
          block=AuxVariables/stress_rr
 
+## Stress Intensity
+
+The scalar type `StressIntensity` calculates the stress intensity for a Rank-2 tensor, as shown in
+[eq:sint_scalar_type].
+\begin{equation}
+\label{eq:sint_scalar_type}
+s = 2 \sigma_{max}^{shear} = \sigma_{max}^{principal} - \sigma_{min}^{principal}
+\end{equation}
+
+This quantity is useful in evaluating whether a Tresca failure criteria has
+been met and is two times the MaxShear quantity.
+
+#### Example Input File Syntax
+
+!listing modules/tensor_mechanics/test/tests/elastic_patch/elastic_patch.i
+         block=AuxKernels/sint
+
+An AuxVariable is required to store the AuxKernel information. Note that the name of the AuxVariable
+is used as the argument for the `variable` input parameter in the `RankTwoScalarAux` block.
+
+!listing modules/tensor_mechanics/test/tests/elastic_patch/elastic_patch.i
+         block=AuxVariables/sint
+
 ## Triaxiality Stress
 
 The scalar type `TriaxialityStress` finds the ratio of the hydrostatic measure, $T_{hydrostatic}$, to
@@ -280,13 +323,36 @@ where $S_{ij}$ is the deviatoric tensor of the Rank-2 tensor $T_{ij}$.
 
 ## Volumetric Strain
 
-The scalar type `VolumetricStrain` computes the change in volume divided by the original volume and
-is most appliable for strain.  For a Rank-2 tensor, $T_{ij}$, the volumetric strain quantity is
-calculated with [eq:volumetric_strain_scalar_type].
+The scalar type `VolumetricStrain` computes the volumetric strain, defined as
 \begin{equation}
-\label{eq:volumetric_strain_scalar_type}
-s = T_{11} \cdot \left( T_{22} + T_{33} \right) + T_{22} \cdot T_{33} + T_{11} \cdot T_{22} \cdot T_{33}
+\label{eq:volumetric_strain}
+\varepsilon_{vol} = \frac{\Delta V}{V}
 \end{equation}
+where $\Delta V$ is the change in volume and $V$ is the original volume.
+
+This calculation assumes that the strains supplied as input ($T$) are logarithmic strains,
+which are by definition $log(L/L_0)$, where $L$ is the current length and $L_0$
+is the original length of a line segment in a given direction.
+The ratio of the volume change of a strained cube to the original volume is thus:
+\begin{equation}
+\label{eq:volumetric_strain_from_tensor}
+s = \frac{\Delta V}{V} = \exp(T_{11}) * \exp(T_{22}) * \exp(T_{33}) - 1
+\end{equation}
+This is the value computed as the volumetric strain.
+
+
+!alert! note title=Finite strain effects
+This calculation assumes that the supplied Rank-2 tensor $T_{ij}$ is a logarithmic strain, which is
+the strain quantity computed for finite strain calculations. The small-strain equivalent of this
+calculation would be
+\begin{equation}
+\label{eq:volumetric_strain_small_strain}
+s = T_{11} + T_{22} + T_{33}
+\end{equation}
+which assumes that engineering strains are supplied and ignores higher-order terms. There is currently
+no option to compute this small-strain form of the volumetric strain because at small strains, the
+differences between the finite strain form used and the small strain approximation is small.
+!alert-end!
 
 ### Example Input File Syntax
 
@@ -337,7 +403,7 @@ Results will have different quality based on the AuxVariable:
   purposes. Using higher order monomial variables in this way can produce smoother visualizations of results for a properly
   converged simulation.
 - +Nodal Lagrange+ Using an AuxVariable with `family = LAGRANGE` will result in a smooth nodal field of the material property,
-  constructed using [nodal patch recovery](nodal_patch_recovery.md).
+  constructed using [nodal patch recovery](nodal_patch_recovery.md optional=True).
   `patch_polynomial_order` is set to equal the order of the AuxVariable by default.
   Use this option for the best (smoothest, most accurate) results, but there is
   some additional computational cost. Furthermore, this method is suitable +only

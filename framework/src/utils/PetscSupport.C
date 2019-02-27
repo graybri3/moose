@@ -27,6 +27,7 @@
 #include "Conversion.h"
 #include "Executioner.h"
 #include "MooseMesh.h"
+#include "ComputeLineSearchObjectWrapper.h"
 
 #include "libmesh/equation_systems.h"
 #include "libmesh/linear_implicit_system.h"
@@ -263,11 +264,9 @@ PetscErrorCode
 petscSetupOutput(CommandLine * cmd_line)
 {
   char code[10] = {45, 45, 109, 111, 111, 115, 101};
-  int argc = cmd_line->argc();
-  char ** argv = cmd_line->argv();
-  for (int i = 0; i < argc; i++)
+  const std::vector<std::string> argv = cmd_line->getArguments();
+  for (const auto & arg : argv)
   {
-    std::string arg(argv[i]);
     if (arg == std::string(code, 10))
     {
       Console::petscSetupOutput();
@@ -336,15 +335,15 @@ petscConverged(KSP ksp, PetscInt n, PetscReal rnorm, KSPConvergedReason * reason
 
   switch (moose_reason)
   {
-    case MOOSE_CONVERGED_RTOL:
+    case MooseLinearConvergenceReason::CONVERGED_RTOL:
       *reason = KSP_CONVERGED_RTOL;
       break;
 
-    case MOOSE_CONVERGED_ITS:
+    case MooseLinearConvergenceReason::CONVERGED_ITS:
       *reason = KSP_CONVERGED_ITS;
       break;
 
-    case MOOSE_DIVERGED_NANORINF:
+    case MooseLinearConvergenceReason::DIVERGED_NANORINF:
 #if PETSC_VERSION_LESS_THAN(3, 4, 0)
       // Report divergence due to exceeding the divergence tolerance.
       *reason = KSP_DIVERGED_DTOL;
@@ -354,8 +353,12 @@ petscConverged(KSP ksp, PetscInt n, PetscReal rnorm, KSPConvergedReason * reason
 #endif
       break;
 #if !PETSC_VERSION_LESS_THAN(3, 6, 0) // A new convergence enum in PETSc 3.6
-    case MOOSE_DIVERGED_PCSETUP_FAILED:
+    case MooseLinearConvergenceReason::DIVERGED_PCSETUP_FAILED:
+#if PETSC_VERSION_LESS_THAN(3, 11, 0) && PETSC_VERSION_RELEASE
       *reason = KSP_DIVERGED_PCSETUP_FAILED;
+#else
+      *reason = KSP_DIVERGED_PC_FAILED;
+#endif
       break;
 #endif
     default:
@@ -450,19 +453,19 @@ petscNonlinearConverged(SNES snes,
 
   switch (moose_reason)
   {
-    case MOOSE_NONLINEAR_ITERATING:
+    case MooseNonlinearConvergenceReason::ITERATING:
       *reason = SNES_CONVERGED_ITERATING;
       break;
 
-    case MOOSE_CONVERGED_FNORM_ABS:
+    case MooseNonlinearConvergenceReason::CONVERGED_FNORM_ABS:
       *reason = SNES_CONVERGED_FNORM_ABS;
       break;
 
-    case MOOSE_CONVERGED_FNORM_RELATIVE:
+    case MooseNonlinearConvergenceReason::CONVERGED_FNORM_RELATIVE:
       *reason = SNES_CONVERGED_FNORM_RELATIVE;
       break;
 
-    case MOOSE_CONVERGED_SNORM_RELATIVE:
+    case MooseNonlinearConvergenceReason::CONVERGED_SNORM_RELATIVE:
 #if PETSC_VERSION_LESS_THAN(3, 3, 0)
       *reason = SNES_CONVERGED_PNORM_RELATIVE;
 #else
@@ -470,15 +473,15 @@ petscNonlinearConverged(SNES snes,
 #endif
       break;
 
-    case MOOSE_DIVERGED_FUNCTION_COUNT:
+    case MooseNonlinearConvergenceReason::DIVERGED_FUNCTION_COUNT:
       *reason = SNES_DIVERGED_FUNCTION_COUNT;
       break;
 
-    case MOOSE_DIVERGED_FNORM_NAN:
+    case MooseNonlinearConvergenceReason::DIVERGED_FNORM_NAN:
       *reason = SNES_DIVERGED_FNORM_NAN;
       break;
 
-    case MOOSE_DIVERGED_LINE_SEARCH:
+    case MooseNonlinearConvergenceReason::DIVERGED_LINE_SEARCH:
 #if PETSC_VERSION_LESS_THAN(3, 2, 0)
       *reason = SNES_DIVERGED_LS_FAILURE;
 #else
@@ -735,14 +738,14 @@ storePetscOptions(FEProblemBase & fe_problem, const InputParameters & params)
     {
 #if !PETSC_VERSION_LESS_THAN(3, 9, 0)
       if (petsc_options_inames[i] == "-pc_factor_mat_solver_package")
-      {
         po.inames.push_back("-pc_factor_mat_solver_type");
-        mooseDeprecated("Please use -pc_factor_mat_solver_type for PETSc-3.9.x or higher");
-      }
       else
         po.inames.push_back(petsc_options_inames[i]);
 #else
-      po.inames.push_back(petsc_options_inames[i]);
+      if (petsc_options_inames[i] == "-pc_factor_mat_solver_type")
+        po.inames.push_back("-pc_factor_mat_solver_package");
+      else
+        po.inames.push_back(petsc_options_inames[i]);
 #endif
       po.values.push_back(petsc_options_values[i]);
 
@@ -967,16 +970,6 @@ colorAdjacencyMatrix(PetscScalar * adjacency_matrix,
   MatColoringDestroy(&mc);
 #endif
   ISColoringDestroy(&iscoloring);
-}
-
-ComputeLineSearchObjectWrapper::ComputeLineSearchObjectWrapper(FEProblemBase & fe_problem)
-  : _fe_problem(fe_problem)
-{
-}
-
-void ComputeLineSearchObjectWrapper::linesearch(SNESLineSearch /*line_search_object*/)
-{
-  _fe_problem.lineSearch();
 }
 
 } // Namespace PetscSupport

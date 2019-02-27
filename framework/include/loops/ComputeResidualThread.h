@@ -19,7 +19,7 @@
 class FEProblemBase;
 class NonlinearSystemBase;
 class IntegratedBCBase;
-class DGKernel;
+class DGKernelBase;
 class InterfaceKernel;
 class TimeKernel;
 class KernelBase;
@@ -51,13 +51,19 @@ protected:
   unsigned int _num_cached;
 
   /// Reference to BC storage structures
-  const MooseObjectWarehouse<IntegratedBCBase> & _integrated_bcs;
+  MooseObjectTagWarehouse<IntegratedBCBase> & _integrated_bcs;
+
+  MooseObjectWarehouse<IntegratedBCBase> * _ibc_warehouse;
 
   /// Reference to DGKernel storage structure
-  const MooseObjectWarehouse<DGKernel> & _dg_kernels;
+  MooseObjectTagWarehouse<DGKernelBase> & _dg_kernels;
+
+  MooseObjectWarehouse<DGKernelBase> * _dg_warehouse;
 
   /// Reference to interface kernel storage structure
-  const MooseObjectWarehouse<InterfaceKernel> & _interface_kernels;
+  MooseObjectTagWarehouse<InterfaceKernel> & _interface_kernels;
+
+  MooseObjectWarehouse<InterfaceKernel> * _ik_warehouse;
 
   ///@{
   /// Reference to Kernel storage structures

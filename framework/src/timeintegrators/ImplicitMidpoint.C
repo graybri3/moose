@@ -38,11 +38,21 @@ ImplicitMidpoint::computeTimeDerivatives()
   // We are multiplying by the method coefficients in postResidual(), so
   // the time derivatives are of the same form at every stage although
   // the current solution varies depending on the stage.
-  _u_dot = *_solution;
-  _u_dot -= _solution_old;
-  _u_dot *= 1. / _dt;
-  _u_dot.close();
+  if (!_sys.solutionUDot())
+    mooseError("ImplicitMidpoint: Time derivative of solution (`u_dot`) is not stored. Please set "
+               "uDotRequested() to true in FEProblemBase befor requesting `u_dot`.");
+
+  NumericVector<Number> & u_dot = *_sys.solutionUDot();
+  u_dot = *_solution;
+  computeTimeDerivativeHelper(u_dot, _solution_old);
+  u_dot.close();
   _du_dot_du = 1. / _dt;
+}
+
+void
+ImplicitMidpoint::computeADTimeDerivatives(DualReal & ad_u_dot, const dof_id_type & dof)
+{
+  computeTimeDerivativeHelper(ad_u_dot, _solution_old(dof));
 }
 
 void

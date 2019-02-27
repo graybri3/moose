@@ -8,6 +8,7 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 #include "MaterialPropertyStorage.h"
+#include "MaterialProperty.h"
 #include "Material.h"
 #include "MaterialData.h"
 #include "MooseMesh.h"
@@ -264,7 +265,7 @@ MaterialPropertyStorage::initStatefulProps(MaterialData & material_data,
 }
 
 void
-MaterialPropertyStorage::shift()
+MaterialPropertyStorage::shift(const FEProblemBase & fe_problem)
 {
   /**
    * Shift properties back in time and reuse older data for current (save reallocations etc.)
@@ -277,6 +278,17 @@ MaterialPropertyStorage::shift()
 
   // Intentional fall through for case above and for handling just using old properties
   std::swap(_props_elem_old, _props_elem);
+  if (fe_problem.usingADMatProps())
+  {
+    for (auto && elem_pair : (*_props_elem))
+      for (auto && side_pair : elem_pair.second)
+        for (auto && prop_value_ptr : side_pair.second)
+          prop_value_ptr->markAD(true);
+    for (auto && elem_pair : (*_props_elem_old))
+      for (auto && side_pair : elem_pair.second)
+        for (auto && prop_value_ptr : side_pair.second)
+          prop_value_ptr->markAD(false);
+  }
 }
 
 void

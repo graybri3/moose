@@ -102,11 +102,6 @@ validParams<SolidModel>()
   params.addParam<bool>("compute_JIntegral", false, "Whether to compute the J Integral.");
   params.addParam<bool>(
       "compute_InteractionIntegral", false, "Whether to compute the Interaction Integral.");
-  params.addParam<bool>("store_stress_older",
-                        false,
-                        "Parameter which indicates whether the older "
-                        "stress state, required for HHT time "
-                        "integration, needs to be stored");
   params.addCoupledVar("disp_r", "The r displacement");
   params.addCoupledVar("disp_x", "The x displacement");
   params.addCoupledVar("disp_y", "The y displacement");
@@ -217,7 +212,6 @@ SolidModel::SolidModel(const InputParameters & parameters)
     _strain_increment(0),
     _compute_JIntegral(getParam<bool>("compute_JIntegral")),
     _compute_InteractionIntegral(getParam<bool>("compute_InteractionIntegral")),
-    _store_stress_older(getParam<bool>("store_stress_older")),
     _SED(NULL),
     _SED_old(NULL),
     _Eshelby_tensor(NULL),
@@ -242,6 +236,11 @@ SolidModel::SolidModel(const InputParameters & parameters)
   // Use the first block to figure out the coordinate system (the above check ensures that they are
   // the same)
   _coord_type = _subproblem.getCoordSystem(_block_id[0]);
+
+  if (_coord_type == Moose::COORD_RZ && _subproblem.getAxisymmetricRadialCoord() != 0)
+    mooseError(
+        "rz_coord_axis=Y is the only supported option for axisymmetric SolidMechanics models");
+
   _element = createElement();
 
   const std::vector<std::string> & dmp = getParam<std::vector<std::string>>("dep_matl_props");

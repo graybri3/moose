@@ -1,4 +1,4 @@
-# Core Extension Tests
+# Core Extension
 
 ## Code Blocks
 
@@ -57,7 +57,7 @@ for i in range(10):
 
 ## Unordered Lists
 
-### Single level lists
+### Single level lists id=unordered-single-level-lists
 
 - Item 1
 - Item 2
@@ -75,7 +75,7 @@ for i in range(10):
 
 
 
-### Nested lists
+### Nested lists id=unordered-nested-lists
 
 - Item 1
 
@@ -98,7 +98,7 @@ for i in range(10):
 
 ## Ordered List
 
-### Single level lists
+### Single level lists id=ordered-single-level-lists
 
 1. One
 1. Two
@@ -122,9 +122,9 @@ for i in range(10):
 12345. Twelve thousand *three* hundred and forty-five
 12345. Twelve thousand three hundred and forty-six
 
-       1. A nested item with a +huge+ number.
+       1. A nested item within a +huge+ number.
 
-### Nested lists
+### Nested lists id=ordered-nested-lists
 
 1. One
 
@@ -151,7 +151,7 @@ for i in range(10):
 
 A popular search engine is [google].
 
-[google]: www.google.com
+[google]: https://www.google.com
 
 ## Inline formatting
 
@@ -173,3 +173,7 @@ Yo, dawg I heard you like formatting, so I created =underline
 formatted text that contains text with ~stikethrough that
 contains +bold formatting with *emphasis that has some^superscript
 text with a@subscript@^*+~=, I hope you like it.
+
+## Links id=links
+
+This is a link to [google](https://www.google.com).

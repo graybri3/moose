@@ -8,7 +8,6 @@
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
 // MOOSE includes
-#include "MooseApp.h"
 #include "MooseRevision.h"
 #include "AppFactory.h"
 #include "MooseSyntax.h"
@@ -20,6 +19,7 @@
 #include "InfixIterator.h"
 #include "MultiApp.h"
 #include "MeshModifier.h"
+#include "MeshGenerator.h"
 #include "DependencyResolver.h"
 #include "MooseUtils.h"
 #include "MooseObjectAction.h"
@@ -37,6 +37,7 @@
 #include "SerializerGuard.h"
 #include "PerfGraphInterface.h" // For TIME_SECTIOn
 #include "Attributes.h"
+#include "MooseApp.h"
 
 // Regular expression includes
 #include "pcrecpp.h"
@@ -259,6 +260,7 @@ MooseApp::MooseApp(InputParameters parameters)
     _pars(parameters),
     _type(getParam<std::string>("_type")),
     _comm(getParam<std::shared_ptr<Parallel::Communicator>>("_comm")),
+    _perf_graph(type() + " (" + name() + ')'),
     _output_position_set(false),
     _start_time_set(false),
     _start_time(0.0),
@@ -301,6 +303,8 @@ MooseApp::MooseApp(InputParameters parameters)
     _restore_timer(_perf_graph.registerSection("MooseApp::restore", 2)),
     _run_timer(_perf_graph.registerSection("MooseApp::run", 3)),
     _execute_mesh_modifiers_timer(_perf_graph.registerSection("MooseApp::executeMeshModifiers", 1)),
+    _execute_mesh_generators_timer(
+        _perf_graph.registerSection("MooseApp::executeMeshGenerators", 1)),
     _restore_cached_backup_timer(_perf_graph.registerSection("MooseApp::restoreCachedBackup", 2)),
     _create_minimal_app_timer(_perf_graph.registerSection("MooseApp::createMinimalApp", 3))
 {
@@ -884,10 +888,10 @@ MooseApp::registerRecoverableData(std::string name)
 std::shared_ptr<Backup>
 MooseApp::backup()
 {
+  mooseAssert(_executioner, "Executioner is nullptr");
   FEProblemBase & fe_problem = _executioner->feProblem();
 
   RestartableDataIO rdio(fe_problem);
-
   return rdio.createBackup();
 }
 
@@ -896,18 +900,10 @@ MooseApp::restore(std::shared_ptr<Backup> backup, bool for_restart)
 {
   TIME_SECTION(_restore_timer);
 
-  // This means that a Backup is coming through to use for restart / recovery
-  // We should just cache it for now
-  if (!_executioner)
-  {
-    _cached_backup = backup;
-    return;
-  }
-
+  mooseAssert(_executioner, "Executioner is nullptr");
   FEProblemBase & fe_problem = _executioner->feProblem();
 
   RestartableDataIO rdio(fe_problem);
-
   rdio.restoreBackup(backup, for_restart);
 }
 
@@ -1402,7 +1398,7 @@ MooseApp::executeMeshModifiers()
         modifier->modifyMesh(mesh, displaced_mesh);
 
       /**
-       * Set preparation flag after modifers are run. The final preparation
+       * Set preparation flag after modifiers are run. The final preparation
        * will be handled by the SetupMeshComplete Action.
        */
       mesh->prepared(false);
@@ -1419,6 +1415,121 @@ MooseApp::clearMeshModifiers()
 }
 
 void
+MooseApp::addMeshGenerator(const std::string & generator_name,
+                           const std::string & name,
+                           InputParameters parameters)
+{
+  std::shared_ptr<MeshGenerator> mesh_generator =
+      _factory.create<MeshGenerator>(generator_name, name, parameters);
+
+  _mesh_generators.insert(std::make_pair(MooseUtils::shortName(name), mesh_generator));
+}
+
+const MeshGenerator &
+MooseApp::getMeshGenerator(const std::string & name) const
+{
+  return *_mesh_generators.find(MooseUtils::shortName(name))->second.get();
+}
+
+std::vector<std::string>
+MooseApp::getMeshGeneratorNames() const
+{
+  std::vector<std::string> names;
+  for (auto & pair : _mesh_generators)
+    names.push_back(pair.first);
+  return names;
+}
+
+std::unique_ptr<MeshBase> &
+MooseApp::getMeshGeneratorOutput(const std::string & name)
+{
+  auto & outputs = _mesh_generator_outputs[name];
+
+  outputs.push_back(nullptr);
+
+  return outputs.back();
+}
+
+void
+MooseApp::executeMeshGenerators()
+{
+  if (!_mesh_generators.empty())
+  {
+    TIME_SECTION(_execute_mesh_generators_timer);
+
+    DependencyResolver<std::shared_ptr<MeshGenerator>> resolver;
+
+    // Add all of the dependencies into the resolver and sort them
+    for (const auto & it : _mesh_generators)
+    {
+      // Make sure an item with no dependencies comes out too!
+      resolver.addItem(it.second);
+
+      std::vector<std::string> & generators = it.second->getDependencies();
+      for (const auto & depend_name : generators)
+      {
+        auto depend_it = _mesh_generators.find(depend_name);
+
+        if (depend_it == _mesh_generators.end())
+          mooseError("The MeshGenerator \"",
+                     depend_name,
+                     "\" was not created, did you make a "
+                     "spelling mistake or forget to include it "
+                     "in your input file?");
+
+        resolver.insertDependency(it.second, depend_it->second);
+      }
+    }
+
+    const auto & ordered_generators = resolver.getSortedValues();
+
+    if (ordered_generators.size())
+    {
+      // Grab the outputs from the final generator so MeshGeneratorMesh can pick them up
+      auto final_generator_name = ordered_generators.back()->name();
+
+      _final_generated_meshes.emplace_back(&getMeshGeneratorOutput(final_generator_name));
+
+      // Need to grab two if we're going to be making a displaced mesh
+      if (_action_warehouse.displacedMesh())
+        _final_generated_meshes.emplace_back(&getMeshGeneratorOutput(final_generator_name));
+
+      // Run the MeshGenerators in the proper order
+      for (const auto & generator : ordered_generators)
+      {
+        auto name = generator->name();
+
+        auto current_mesh = generator->generate();
+
+        // Now we need to possibly give this mesh to downstream generators
+        auto & outputs = _mesh_generator_outputs[name];
+
+        if (outputs.size())
+        {
+          auto & first_output = *outputs.begin();
+
+          first_output = std::move(current_mesh);
+
+          const auto & copy_from = *first_output;
+
+          auto output_it = ++outputs.begin();
+
+          // For all of the rest we need to make a copy
+          for (; output_it != outputs.end(); ++output_it)
+            (*output_it) = copy_from.clone();
+        }
+      }
+    }
+  }
+}
+
+void
+MooseApp::clearMeshGenerators()
+{
+  _mesh_generators.clear();
+}
+
+void
 MooseApp::setRestart(const bool & value)
 {
   _restart = value;
@@ -1430,6 +1541,12 @@ void
 MooseApp::setRecover(const bool & value)
 {
   _recover = value;
+}
+
+void
+MooseApp::setBackupObject(std::shared_ptr<Backup> backup)
+{
+  _cached_backup = backup;
 }
 
 void
@@ -1451,12 +1568,11 @@ MooseApp::createMinimalApp()
 {
   TIME_SECTION(_create_minimal_app_timer);
 
-  // SetupMeshAction (setup_mesh)
+  // SetupMeshAction
   {
     // Build the Action parameters
     InputParameters action_params = _action_factory.getValidParams("SetupMeshAction");
     action_params.set<std::string>("type") = "GeneratedMesh";
-    action_params.set<std::string>("task") = "setup_mesh";
 
     // Create The Action
     std::shared_ptr<MooseObjectAction> action = std::static_pointer_cast<MooseObjectAction>(
@@ -1468,19 +1584,6 @@ MooseApp::createMinimalApp()
     params.set<unsigned int>("nx") = 1;
 
     // Add Action to the warehouse
-    _action_warehouse.addActionBlock(action);
-  }
-
-  // SetupMeshAction (init_mesh)
-  {
-    // Action parameters
-    InputParameters action_params = _action_factory.getValidParams("SetupMeshAction");
-    action_params.set<std::string>("type") = "GeneratedMesh";
-    action_params.set<std::string>("task") = "init_mesh";
-
-    // Build the action
-    std::shared_ptr<Action> action =
-        _action_factory.create("SetupMeshAction", "Mesh", action_params);
     _action_warehouse.addActionBlock(action);
   }
 
@@ -1540,11 +1643,11 @@ MooseApp::addExecFlag(const ExecFlagType & flag)
   if (flag.id() == MooseEnumItem::INVALID_ID)
   {
     // It is desired that users when creating ExecFlagTypes should not worry about needing
-    // to assign a name and an ID. However, the ExecFlagTypes created by users are global constants
-    // and the ID to be assigned can't be known at construction time of this global constant, it is
-    // only known when it is added to this object (ExecFlagEnum). Therefore, this const cast allows
-    // the ID to be set after construction. This was the lesser of two evils: const_cast or
-    // friend class with mutable members.
+    // to assign a name and an ID. However, the ExecFlagTypes created by users are global
+    // constants and the ID to be assigned can't be known at construction time of this global
+    // constant, it is only known when it is added to this object (ExecFlagEnum). Therefore,
+    // this const cast allows the ID to be set after construction. This was the lesser of two
+    // evils: const_cast or friend class with mutable members.
     ExecFlagType & non_const_flag = const_cast<ExecFlagType &>(flag);
     auto it = _execute_flags.find(flag.name());
     if (it != _execute_flags.items().end())

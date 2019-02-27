@@ -17,6 +17,9 @@ class IdealGasFluidPropertiesPT;
 template <>
 InputParameters validParams<IdealGasFluidPropertiesPT>();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
+
 /**
  * Ideal gas fluid properties for (pressure, temperature) variables.
  * Default parameters are for air at atmospheric pressure and temperature.
@@ -32,6 +35,8 @@ public:
   virtual Real molarMass() const override;
 
   virtual Real cp_from_p_T(Real pressure, Real temperature) const override;
+
+  using SinglePhaseFluidProperties::cp_from_p_T;
 
   virtual Real cv_from_p_T(Real pressure, Real temperature) const override;
 
@@ -69,16 +74,17 @@ public:
   virtual void mu_from_p_T(
       Real pressure, Real temperature, Real & mu, Real & dmu_dp, Real & dmu_dT) const override;
 
-  virtual void rho_mu(Real pressure, Real temperature, Real & rho, Real & mu) const override;
+  virtual void
+  rho_mu_from_p_T(Real pressure, Real temperature, Real & rho, Real & mu) const override;
 
-  virtual void rho_mu_dpT(Real pressure,
-                          Real temperature,
-                          Real & rho,
-                          Real & drho_dp,
-                          Real & drho_dT,
-                          Real & mu,
-                          Real & dmu_dp,
-                          Real & dmu_dT) const override;
+  virtual void rho_mu_from_p_T(Real pressure,
+                               Real temperature,
+                               Real & rho,
+                               Real & drho_dp,
+                               Real & drho_dT,
+                               Real & mu,
+                               Real & dmu_dp,
+                               Real & dmu_dT) const override;
 
   virtual Real h_from_p_T(Real p, Real T) const override;
 
@@ -87,7 +93,7 @@ public:
 
   virtual Real henryConstant(Real temperature) const override;
 
-  virtual void henryConstant_dT(Real temperature, Real & Kh, Real & dKh_dT) const override;
+  virtual void henryConstant(Real temperature, Real & Kh, Real & dKh_dT) const override;
 
 protected:
   /// molar mass
@@ -105,5 +111,7 @@ protected:
   /// Henry constant
   const Real _henry_constant;
 };
+
+#pragma GCC diagnostic pop
 
 #endif /* IDEALGASFLUIDPROPERTIESPT_H */

@@ -98,8 +98,43 @@ MaterialPropertyInterface::defaultADMaterialProperty(const std::string & name)
   // check if the string parsed cleanly into a Real number
   if (ss >> real_value && ss.eof())
   {
-    _default_ad_real_properties.emplace_back(libmesh_make_unique<ADMaterialPropertyObject<Real>>());
+    _default_ad_real_properties.emplace_back(
+        libmesh_make_unique<ADMaterialPropertyObject<Real>>(true));
     auto & default_property = _default_ad_real_properties.back();
+
+    // resize to accomodate maximum number obf qpoints
+    auto nqp = _mi_feproblem.getMaxQps();
+    default_property->resize(nqp);
+
+    // set values for all qpoints to the given default
+    for (decltype(nqp) qp = 0; qp < nqp; ++qp)
+    {
+      // This sets the dual number member of the MooseADWrapper for Jacobian calculations
+      (*default_property)[qp] = real_value;
+      // This sets the value member of the MooseADWrapper for residual calculations
+      default_property->set()[qp].value() = real_value;
+    }
+
+    // return the raw pointer inside the shared pointer
+    return default_property.get();
+  }
+
+  return nullptr;
+}
+
+template <>
+const ADMaterialPropertyObject<RealVectorValue> *
+MaterialPropertyInterface::defaultADMaterialProperty(const std::string & name)
+{
+  std::istringstream ss(name);
+  Real real_value;
+
+  // check if the string parsed cleanly into a Real number
+  if (ss >> real_value && ss.eof())
+  {
+    _default_ad_real_vector_properties.emplace_back(
+        libmesh_make_unique<ADMaterialPropertyObject<RealVectorValue>>());
+    auto & default_property = _default_ad_real_vector_properties.back();
 
     // resize to accomodate maximum number obf qpoints
     auto nqp = _mi_feproblem.getMaxQps();
@@ -172,12 +207,9 @@ MaterialPropertyInterface::getMaterial(const std::string & name)
   return getMaterialByName(_mi_params.get<MaterialName>(name));
 }
 
-Material &
-MaterialPropertyInterface::getMaterialByName(const std::string & name, bool no_warn)
+void
+MaterialPropertyInterface::checkBlockAndBoundaryCompatibility(std::shared_ptr<Material> discrete)
 {
-  std::shared_ptr<Material> discrete =
-      _mi_feproblem.getMaterial(name, _material_data_type, _mi_tid, no_warn);
-
   // Check block compatibility
   if (!discrete->hasBlocks(_mi_block_ids))
   {
@@ -213,9 +245,42 @@ MaterialPropertyInterface::getMaterialByName(const std::string & name, bool no_w
     oss << "\n";
     mooseError(oss.str());
   }
+}
 
+Material &
+MaterialPropertyInterface::getMaterialByName(const std::string & name, bool no_warn)
+{
+  std::shared_ptr<Material> discrete =
+      _mi_feproblem.getMaterial(name, _material_data_type, _mi_tid, no_warn);
+  checkBlockAndBoundaryCompatibility(discrete);
   return *discrete;
 }
+
+template <ComputeStage compute_stage>
+Material &
+MaterialPropertyInterface::getMaterial(const std::string & name)
+{
+  return getMaterialByName<compute_stage>(_mi_params.get<MaterialName>(name));
+}
+
+template <>
+Material &
+MaterialPropertyInterface::getMaterialByName<RESIDUAL>(const std::string & name, bool no_warn)
+{
+  const std::string new_name = name + "_residual";
+  return getMaterialByName(new_name, no_warn);
+}
+
+template <>
+Material &
+MaterialPropertyInterface::getMaterialByName<JACOBIAN>(const std::string & name, bool no_warn)
+{
+  const std::string new_name = name + "_jacobian";
+  return getMaterialByName(new_name, no_warn);
+}
+
+template Material & MaterialPropertyInterface::getMaterial<RESIDUAL>(const std::string &);
+template Material & MaterialPropertyInterface::getMaterial<JACOBIAN>(const std::string &);
 
 void
 MaterialPropertyInterface::checkExecutionStage()

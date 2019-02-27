@@ -32,16 +32,23 @@ public:
 protected:
   virtual void initQpStatefulProperties() override;
   virtual void computeQpProperties() override;
+
+  /**
+   * Compute the stress and store it in the _stress material property
+   * for the current quadrature point
+   **/
   virtual void computeQpStress() = 0;
 
+  /// Base name prepended to all material property names to allow for
+  /// multi-material systems
   const std::string _base_name;
-  const std::string _elasticity_tensor_name;
 
+  /// Mechanical strain material property
   const MaterialProperty<RankTwoTensor> & _mechanical_strain;
+  /// Stress material property
   MaterialProperty<RankTwoTensor> & _stress;
+  /// Elastic strain material property
   MaterialProperty<RankTwoTensor> & _elastic_strain;
-
-  const MaterialProperty<RankFourTensor> & _elasticity_tensor;
 
   /// Extra stress tensor
   const MaterialProperty<RankTwoTensor> & _extra_stress;
@@ -51,9 +58,6 @@ protected:
 
   /// derivative of stress w.r.t. strain (_dstress_dstrain)
   MaterialProperty<RankFourTensor> & _Jacobian_mult;
-
-  /// Parameter which decides whether to store old stress. This is required for HHT time integration and Rayleigh damping
-  const bool _store_stress_old;
 };
 
 #endif // COMPUTESTRESSBASE_H

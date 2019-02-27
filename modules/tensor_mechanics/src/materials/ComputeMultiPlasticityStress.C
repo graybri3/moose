@@ -119,6 +119,8 @@ ComputeMultiPlasticityStress::ComputeMultiPlasticityStress(const InputParameters
 
     _perform_finite_strain_rotations(getParam<bool>("perform_finite_strain_rotations")),
 
+    _elasticity_tensor_name(_base_name + "elasticity_tensor"),
+    _elasticity_tensor(getMaterialPropertyByName<RankFourTensor>(_elasticity_tensor_name)),
     _plastic_strain(declareProperty<RankTwoTensor>("plastic_strain")),
     _plastic_strain_old(getMaterialPropertyOld<RankTwoTensor>("plastic_strain")),
     _intnl(declareProperty<std::vector<Real>>("plastic_internal_parameter")),
@@ -152,14 +154,15 @@ ComputeMultiPlasticityStress::ComputeMultiPlasticityStress(const InputParameters
     // disregards block restrictions.
     _cosserat(hasMaterialProperty<RankTwoTensor>("curvature") &&
               hasMaterialProperty<RankFourTensor>("elastic_flexural_rigidity_tensor")),
-    _curvature(_cosserat ? &getMaterialPropertyByName<RankTwoTensor>("curvature") : NULL),
+    _curvature(_cosserat ? &getMaterialPropertyByName<RankTwoTensor>("curvature") : nullptr),
     _elastic_flexural_rigidity_tensor(
         _cosserat ? &getMaterialPropertyByName<RankFourTensor>("elastic_flexural_rigidity_tensor")
-                  : NULL),
-    _couple_stress(_cosserat ? &declareProperty<RankTwoTensor>("couple_stress") : NULL),
-    _couple_stress_old(_cosserat ? &getMaterialPropertyOld<RankTwoTensor>("couple_stress") : NULL),
+                  : nullptr),
+    _couple_stress(_cosserat ? &declareProperty<RankTwoTensor>("couple_stress") : nullptr),
+    _couple_stress_old(_cosserat ? &getMaterialPropertyOld<RankTwoTensor>("couple_stress")
+                                 : nullptr),
     _Jacobian_mult_couple(_cosserat ? &declareProperty<RankFourTensor>("couple_Jacobian_mult")
-                                    : NULL),
+                                    : nullptr),
 
     _my_elasticity_tensor(RankFourTensor()),
     _my_strain_increment(RankTwoTensor()),

@@ -12,11 +12,15 @@
 
 #include "SystemBase.h"
 
-#include "libmesh/transient_system.h"
-#include "libmesh/explicit_system.h"
-
 // Forward declarations
 class DisplacedProblem;
+namespace libMesh
+{
+class ExplicitSystem;
+template <typename>
+class TransientSystem;
+typedef TransientSystem<ExplicitSystem> TransientExplicitSystem;
+}
 
 class DisplacedSystem : public SystemBase
 {
@@ -82,11 +86,18 @@ public:
 
   virtual NumericVector<Number> & solution() override { return _undisplaced_system.solution(); }
 
-  virtual NumericVector<Number> & solutionUDot() override
+  virtual NumericVector<Number> * solutionUDot() override
   {
     return _undisplaced_system.solutionUDot();
   }
+
+  virtual NumericVector<Number> * solutionUDotDot() override
+  {
+    return _undisplaced_system.solutionUDotDot();
+  }
+
   virtual Number & duDotDu() override { return _undisplaced_system.duDotDu(); }
+  virtual Number & duDotDotDu() override { return _undisplaced_system.duDotDotDu(); }
 
   /**
    * Return the residual copy from the NonlinearSystem
@@ -151,16 +162,29 @@ public:
     return _undisplaced_system.getMatrix(tag);
   }
 
-  virtual NumericVector<Number> & solutionOld() override { return *_sys.old_local_solution; }
+  virtual NumericVector<Number> & solutionOld() override;
 
-  virtual NumericVector<Number> & solutionOlder() override { return *_sys.older_local_solution; }
+  virtual NumericVector<Number> & solutionOlder() override;
+
+  virtual NumericVector<Number> * solutionUDotOld() override
+  {
+    return _undisplaced_system.solutionUDotOld();
+  }
+
+  virtual NumericVector<Number> * solutionUDotDotOld() override
+  {
+    return _undisplaced_system.solutionUDotDotOld();
+  }
 
   virtual NumericVector<Number> * solutionPreviousNewton() override { return NULL; }
 
   virtual TransientExplicitSystem & sys() { return _sys; }
 
-  virtual System & system() override { return _sys; }
-  virtual const System & system() const override { return _sys; }
+  virtual System & system() override;
+  virtual const System & system() const override;
+
+  using SystemBase::addTimeIntegrator;
+  void addTimeIntegrator(std::shared_ptr<TimeIntegrator> ti) override;
 
 protected:
   SystemBase & _undisplaced_system;

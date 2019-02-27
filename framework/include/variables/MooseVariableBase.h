@@ -13,8 +13,6 @@
 #include "MooseTypes.h"
 #include "MooseArray.h"
 
-#include "libmesh/tensor_value.h"
-#include "libmesh/vector_value.h"
 #include "libmesh/fe_type.h"
 
 // libMesh forward declarations
@@ -34,7 +32,8 @@ public:
   MooseVariableBase(unsigned int var_num,
                     const FEType & fe_type,
                     SystemBase & sys,
-                    Moose::VarKindType var_kind);
+                    Moose::VarKindType var_kind,
+                    THREAD_ID tid);
   virtual ~MooseVariableBase();
 
   /**
@@ -107,8 +106,6 @@ public:
    */
   virtual bool isVector() const = 0;
 
-  void computingJacobian(bool computing_jacobian) { _computing_jacobian = computing_jacobian; }
-
 protected:
   /// variable number (from libMesh)
   unsigned int _var_num;
@@ -136,7 +133,8 @@ protected:
   /// scaling factor for this variable
   Real _scaling_factor;
 
-  bool _computing_jacobian;
+  /// Thread ID
+  THREAD_ID _tid;
 };
 
 #endif /* MOOSEVARIABLEBASE_H */
