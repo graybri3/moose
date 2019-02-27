@@ -9,7 +9,7 @@
 
 #include "FunctionalBasisInterface.h"
 
-MooseEnum FunctionalBasisInterface::_domain_options("x=0 y=1 z=2");
+MooseEnum FunctionalBasisInterface::_domain_options("x=0 y=1 z=2 sphere=3");
 
 /*
  * The default constructor is used to initialize a series before knowing the number of terms in the

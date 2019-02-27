@@ -113,6 +113,8 @@ protected:
   const MooseEnum & _z;
   /// Stores the name of the single function series to use for a unit disc
   const MooseEnum & _disc;
+  /// Stores the name of the single function series to use for a sphere
+  const MooseEnum & _sphere;
   /// The normalization type for expansion
   const MooseEnum & _expansion_type;
   /// The normalization type for generation

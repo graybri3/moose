@@ -13,6 +13,7 @@
 #include "FunctionSeries.h"
 #include "Cartesian.h"
 #include "CylindricalDuo.h"
+#include "Spherical.h"
 
 registerMooseObject("FunctionalExpansionToolsApp", FunctionSeries);
 
@@ -28,10 +29,10 @@ validParams<FunctionSeries>()
   // The available composite series types.
   //   Cartesian:      1D, 2D, or 3D, depending on which of x, y, and z are present
   //   CylindricalDuo: planar disc expansion and axial expansion
-  MooseEnum series_types("Cartesian CylindricalDuo");
+  MooseEnum series_types("Cartesian CylindricalDuo Spherical");
   MooseEnum single_series_types_1D("Legendre");
   MooseEnum single_series_types_2D("Zernike");
-
+  MooseEnum single_series_types_3D("SphericalHarmonics");
   params.addRequiredParam<MooseEnum>(
       "series_type", series_types, "The type of function series to construct.");
 
@@ -42,7 +43,7 @@ validParams<FunctionSeries>()
   params.addRequiredParam<std::vector<unsigned int>>("orders",
                                                      "The order of each series. These must be "
                                                      "defined as \"x y z\" for Cartesian, and \"z "
-                                                     "disc\" for CylindricalDuo.");
+                                                     "disc\" for CylindricalDuo and \"sphere\" for SphericalHarmonics.");
 
   params.addParam<std::vector<Real>>("physical_bounds",
                                      "The physical bounds of the function series. These must be "
@@ -58,6 +59,9 @@ validParams<FunctionSeries>()
                              single_series_types_2D,
                              "The series to use for the disc. Its direction is determined by "
                              "orthogonality to the declared direction of the axis.");
+  params.addParam<MooseEnum>("sphere",
+                             single_series_types_3D,
+                             "The series to use for the spheres");
 
   std::string normalization_types = "orthonormal sqrt_mu standard";
   MooseEnum expansion_type(normalization_types, "standard");
@@ -81,6 +85,7 @@ FunctionSeries::FunctionSeries(const InputParameters & parameters)
     _y(getParam<MooseEnum>("y")),
     _z(getParam<MooseEnum>("z")),
     _disc(getParam<MooseEnum>("disc")),
+    _sphere(getParam<MooseEnum>("sphere")),
     _expansion_type(getParam<MooseEnum>("expansion_type")),
     _generation_type(getParam<MooseEnum>("generation_type"))
 {
@@ -157,6 +162,20 @@ FunctionSeries::FunctionSeries(const InputParameters & parameters)
 
     types.push_back(_disc);
     _series_type = libmesh_make_unique<CylindricalDuo>(
+        domains, _orders, types, name(), _expansion_type, _generation_type);
+  }
+
+  else if (_series_type_name == "Spherical")
+  {
+     if (isParamValid("sphere"))
+     {
+       domains = {FunctionalBasisInterface::_domain_options = "x",
+                  FunctionalBasisInterface::_domain_options = "y",
+                  FunctionalBasisInterface::_domain_options = "z"};
+       types.push_back(_sphere);
+     }
+
+    _series_type = libmesh_make_unique<Spherical>(
         domains, _orders, types, name(), _expansion_type, _generation_type);
   }
   else

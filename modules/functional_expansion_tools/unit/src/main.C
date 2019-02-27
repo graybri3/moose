@@ -22,6 +22,7 @@ PerfLog Moose::perf_log("gtest");
 
 MooseEnum single_series_types_1D("Legendre");
 MooseEnum single_series_types_2D("Zernike");
+MooseEnum single_series_types_3D("SphericalHarmonics");
 MooseEnum expansion_type("orthonormal sqrt_mu standard");
 MooseEnum generation_type("orthonormal sqrt_mu standard");
 
