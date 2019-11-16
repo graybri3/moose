@@ -9,6 +9,7 @@
 
 #include "Spherical.h"
 #include "SphericalHarmonics.h"
+#include "VolumetricSpherical.h"
 
 Spherical::Spherical(const std::string & who_is_using_me)
   : CompositeSeriesBasisInterface(who_is_using_me)
@@ -29,6 +30,13 @@ if (_series_types[0] == "SphericalHarmonics")
   std::vector<MooseEnum> local_domain = {domains[0], domains[1], domains[2]};
   std::vector<std::size_t> local_order = {orders[0]};
   _series.push_back(libmesh_make_unique<SphericalHarmonics>(
+      local_domain, local_order, expansion_type, generation_type));
+}
+else if (_series_types[0] == "VolumetricSpherical")
+{
+  std::vector<MooseEnum> local_domain = {domains[0], domains[1], domains[2]};
+  std::vector<std::size_t> local_order = {orders[0]};
+  _series.push_back(libmesh_make_unique<VolumetricSpherical>(
       local_domain, local_order, expansion_type, generation_type));
 }
 else

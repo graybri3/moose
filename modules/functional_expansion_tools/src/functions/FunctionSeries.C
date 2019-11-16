@@ -32,7 +32,7 @@ validParams<FunctionSeries>()
   MooseEnum series_types("Cartesian CylindricalDuo Spherical");
   MooseEnum single_series_types_1D("Legendre");
   MooseEnum single_series_types_2D("Zernike");
-  MooseEnum single_series_types_3D("SphericalHarmonics");
+  MooseEnum single_series_types_3D("SphericalHarmonics VolumetricSpherical");
   params.addRequiredParam<MooseEnum>(
       "series_type", series_types, "The type of function series to construct.");
 

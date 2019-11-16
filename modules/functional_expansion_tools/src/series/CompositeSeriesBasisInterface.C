@@ -65,14 +65,14 @@ CompositeSeriesBasisInterface::evaluateSeries(
   std::size_t term = 0;
 
   if (single_series_basis_evaluations.size() == 1)
-    for (std::size_t i = 0; i < _series[0]->getNumberOfTerms(); ++i, ++term)
+    for (std::size_t i = 0; i < _series[0]->getNumberOfTerms(); i++, term++)
       save(term, single_series_basis_evaluations[0][i]);
 
   if (single_series_basis_evaluations.size() == 2)
-    for (std::size_t i = 0; i < _series[0]->getNumberOfTerms(); ++i)
+    for (std::size_t i = 0; i < _series[0]->getNumberOfTerms(); i++)
     {
       f1 = single_series_basis_evaluations[0][i];
-      for (std::size_t j = 0; j < _series[1]->getNumberOfTerms(); ++j, ++term)
+      for (std::size_t j = 0; j < _series[1]->getNumberOfTerms(); j++, term++)
       {
         f2 = single_series_basis_evaluations[1][j];
         save(term, f1 * f2);
@@ -80,13 +80,13 @@ CompositeSeriesBasisInterface::evaluateSeries(
     }
 
   if (single_series_basis_evaluations.size() == 3)
-    for (std::size_t i = 0; i < _series[0]->getNumberOfTerms(); ++i)
+    for (std::size_t i = 0; i < _series[0]->getNumberOfTerms(); i++)
     {
       f1 = single_series_basis_evaluations[0][i];
-      for (std::size_t j = 0; j < _series[1]->getNumberOfTerms(); ++j)
+      for (std::size_t j = 0; j < _series[1]->getNumberOfTerms(); j++)
       {
         f2 = single_series_basis_evaluations[1][j];
-        for (std::size_t k = 0; k < _series[2]->getNumberOfTerms(); ++k, ++term)
+        for (std::size_t k = 0; k < _series[2]->getNumberOfTerms(); k++, term++)
         {
           f3 = single_series_basis_evaluations[2][k];
           save(term, f1 * f2 * f3);

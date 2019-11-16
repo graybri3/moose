@@ -13,6 +13,7 @@
 #include "Zernike.h"
 #include "Spherical.h"
 #include "SphericalHarmonics.h"
+#include "VolumetricSpherical.h"
 
 #ifndef SETUP_H
 #define SETUP_H

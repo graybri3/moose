@@ -7,20 +7,20 @@
 //* Licensed under LGPL 2.1, please see LICENSE for details
 //* https://www.gnu.org/licenses/lgpl-2.1.html
 
-#ifndef SPHERICALHARMONICS_H
-#define SPHERICALHARMONICS_H
+#ifndef VOLUMETRICSPHERICAL_H
+#define VOLUMETRICSPHERICAL_H
 
 #include "SingleSeriesBasisInterface.h"
 
 /**
   * This class provides the algorithms and properties of the Spherical Harmonic Series
 **/
-class SphericalHarmonics : public SingleSeriesBasisInterface
+class VolumetricSpherical : public SingleSeriesBasisInterface
 {
 public:
-  SphericalHarmonics();
+  VolumetricSpherical();
 
-  SphericalHarmonics(const std::vector<MooseEnum> & domain,
+  VolumetricSpherical(const std::vector<MooseEnum> & domain,
                      const std::vector<std::size_t> & order,
                      MooseEnum expansion_type,
                      MooseEnum generation_type);
@@ -53,6 +53,10 @@ virtual void checkPhysicalBounds(const std::vector<Real> & bounds) const overrid
 virtual std::vector<Real>
 getStandardizedLocation(const std::vector<Real> & location) const override;
 
+/**
+ * Maps the double order/rank idices to a single linear index
+ */
+std::size_t simpleDoubleToSingle(std::size_t n, long m) const;
 };
 
 #endif //SPHERICALHARMONIC_H
