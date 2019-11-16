@@ -30,10 +30,10 @@
 
 [BCs]
   [./interface_value]
-    type = FXValueBC
+    type = DirichletBC
     variable = m
     boundary = 1
-    function = FX_Basis_Value_Main
+    value = 100
   [../]
 []
 
@@ -41,9 +41,9 @@
   [./FX_Basis_Value_Main]
     type = FunctionSeries
     series_type = Spherical
-    orders = '3'
-    physical_bounds = '0.0 0.0 0.0 10.0'
-    sphere = VolumetricSpherical
+    orders = '4'
+    physical_bounds = '0.0 0.0 0.0 1.0'
+    sphere = SphericalHarmonics
     generation_type = 'standard'
     expansion_type = 'standard'
     print_when_set = true # Print coefficients when a MultiAppFXTransfer is executed
@@ -60,19 +60,8 @@
   [../]
 []
 
-#[Executioner]
-#  type = Steady
-#  num_steps = 4
-#  dt = 1
-#  solve_type = PJFNK
-#  petsc_options_iname = '-pc_type -pc_hypre_type'
-#  petsc_options_value = 'hypre boomeramg'
-#[]
-
 [Executioner]
-  type = Transient
-  num_steps = 2
-  dt = 0.5
+  type = Steady
   solve_type = PJFNK
   petsc_options_iname = '-pc_type -pc_hypre_type'
   petsc_options_value = 'hypre boomeramg'

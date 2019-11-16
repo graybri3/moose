@@ -5,8 +5,6 @@
 
 [Variables]
   [./m]
-    order = FIRST
-    family = LAGRANGE
   [../]
 []
 
@@ -15,22 +13,27 @@
     type = Diffusion
     variable = m
   [../]
+  [./source_m]
+    type = BodyForce
+    variable = m
+    value = 100
+  [../]
 []
 
 [ICs]
   [./start_m]
     type = ConstantIC
     variable = m
-    value = 1.00001
+    value = 1
   [../]
 []
 
 [BCs]
-[./bottom]
-    type = DirichletBC
+  [./interface_value]
+    type = FXValueBC
     variable = m
     boundary = 1
-    value = 1
+    function = FX_Basis_Value_Main
   [../]
 []
 
@@ -38,11 +41,11 @@
   [./FX_Basis_Value_Main]
     type = FunctionSeries
     series_type = Spherical
-    orders = '4'
+    orders = '3'
     physical_bounds = '0.0 0.0 0.0 10.0'
     sphere = SphericalHarmonics
-    generation_type = 'sqrt_mu'
-    expansion_type = 'sqrt_mu'
+    generation_type = 'standard'
+    expansion_type = 'standard'
     print_when_set = true # Print coefficients when a MultiAppFXTransfer is executed
   [../]
 []
@@ -52,16 +55,21 @@
     type = FXVolumeUserObject
     function = FX_Basis_Value_Main
     variable = m
-    boundary = 1
     print_state = true # Print after the FX coefficients are computer
     print_when_set = true # Print coefficients when a MultiAppFXTransfer is executed
   [../]
 []
 
+#[Executioner]
+#  type = Steady
+#  solve_type = PJFNK
+#  petsc_options_iname = '-pc_type -pc_hypre_type'
+#  petsc_options_value = 'hypre boomeramg'
+#[]
 [Executioner]
-  type = Steady
-  num_steps = 4
-  dt = 1
+  type = Transient
+  num_steps = 2
+  dt = 0.5
   solve_type = PJFNK
   petsc_options_iname = '-pc_type -pc_hypre_type'
   petsc_options_value = 'hypre boomeramg'
@@ -69,4 +77,5 @@
 
 [Outputs]
   exodus = true
+  contains_complete_history = true
 []

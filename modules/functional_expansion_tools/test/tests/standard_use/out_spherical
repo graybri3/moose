@@ -1,0 +1,128 @@
+Running command: /home/brittany/other/moose/modules/functional_expansion_tools/functional_expansion_tools-opt Outputs/csv=true -i peacock_run_exe_tmp_sphericalbc.i
+Working directory: /home/brittany/other/moose/modules/functional_expansion_tools/test/tests/standard_use
+
+
+MutableCoefficientsInterface: FX_Basis_Value_Main
+      Number of Coefficients: 25
+   0:            0       1:            0       2:            0       3:            0       4:            0       5:            0
+   6:            0       7:            0       8:            0       9:            0      10:            0      11:            0
+  12:            0      13:            0      14:            0      15:            0      16:            0      17:            0
+  18:            0      19:            0      20:            0      21:            0      22:            0      23:            0
+  24:            0
+
+
+
+
+
+*** Info ***
+Using FXVolumeUserObject 'FX_Value_UserObject_Main'.
+Note: it is your responsibility to ensure that the dimensionality, order, and series parameters for FunctionSeries 'FX_Basis_Value_Main' are sane.
+
+Framework Information:
+MOOSE Version:           git commit 1fe320752c on 2019-02-27
+LibMesh Version:         7c3f0dc000de7e31194af9033df3d2a1412e306d
+PETSc Version:           3.8.3
+Current Time:            Mon Mar 25 16:00:54 2019
+Executable Timestamp:    Mon Mar 25 12:55:41 2019
+
+Parallelism:
+  Num Processors:          1
+  Num Threads:             1
+
+Mesh:
+  Parallel Type:           replicated
+  Mesh Dimension:          3
+  Spatial Dimension:       3
+  Nodes:
+    Total:                 6147
+    Local:                 6147
+  Elems:
+    Total:                 5800
+    Local:                 5800
+  Num Subdomains:          1
+  Num Partitions:          1
+
+Nonlinear System:
+  Num DOFs:                6147
+  Num Local DOFs:          6147
+  Variables:               "m"
+  Finite Element Types:    "LAGRANGE"
+  Approximation Orders:    "FIRST"
+
+Execution Information:
+  Executioner:             Steady
+  Solver Mode:             Preconditioned JFNK
+  Preconditioner:          hypre boomeramg strong_threshold: 0.7 (auto)
+
+
+
+
+*** Warning ***
+/home/brittany/other/moose/modules/functional_expansion_tools/test/tests/standard_use/peacock_run_exe_tmp_sphericalbc.i:53: unused parameter 'UserObjects/FX_Value_UserObject_Main/boundary'
+/home/brittany/other/moose/modules/functional_expansion_tools/test/tests/standard_use/peacock_run_exe_tmp_sphericalbc.i:63: unused parameter 'Executioner/num_steps'
+/home/brittany/other/moose/modules/functional_expansion_tools/test/tests/standard_use/peacock_run_exe_tmp_sphericalbc.i:64: unused parameter 'Executioner/dt'
+
+
+ 0 Nonlinear |R| = 2.453569e-04
+      0 Linear |R| = 2.453569e-04
+      1 Linear |R| = 1.291790e-06
+      2 Linear |R| = 1.109126e-07
+      3 Linear |R| = 1.422566e-08
+      4 Linear |R| = 6.673195e-10
+ 1 Nonlinear |R| = 6.673189e-10
+      0 Linear |R| = 6.673189e-10
+      1 Linear |R| = 4.755171e-11
+      2 Linear |R| = 4.969223e-12
+      3 Linear |R| = 7.475401e-13
+      4 Linear |R| = 1.621841e-14
+      5 Linear |R| = 4.048442e-16
+ 2 Nonlinear |R| = 1.213216e-15
+ Solve Converged!
+
+MutableCoefficientsInterface: FX_Basis_Value_Main
+      Number of Coefficients: 25
+   0:      4.18878       1:      2.66487       2: -3.49317e-16       3:  2.46411e-16       4:  1.08339e-15       5:  2.18751e-17
+   6:     -4.16383       7: -7.49558e-17       8:  1.03467e-06       9:     0.890923      10: -8.75297e-19      11:     -2.63843
+  12: -3.03702e-16      13:  2.58072e-15      14:   7.7781e-18      15: -1.77944e-15      16:  3.10184e-16      17:   1.1818e-16
+  18:  3.76578e-15      19:  -5.7804e-16      20:       12.318      21: -3.58188e-16      22: -1.03444e-06      23:  3.55228e-17
+  24:  -0.00790251
+
+
+
+FunctionSeries: FX_Basis_Value_Main
+         Terms: 25
+---------------- Coefficients ----------------
+               == Subindices ==
+         Orders:   4
+ == Index  ==      x             === Value ===
+----------------------------------------------
+       0           0                  4.18878
+       1           1                  2.66487
+       2           2             -3.49317e-16
+       3           3              2.46411e-16
+       4           4              1.08339e-15
+       5           5              2.18751e-17
+       6           6                 -4.16383
+       7           7             -7.49558e-17
+       8           8              1.03467e-06
+       9           9                 0.890923
+      10          10             -8.75297e-19
+      11          11                 -2.63843
+      12          12             -3.03702e-16
+      13          13              2.58072e-15
+      14          14               7.7781e-18
+      15          15             -1.77944e-15
+      16          16              3.10184e-16
+      17          17               1.1818e-16
+      18          18              3.76578e-15
+      19          19              -5.7804e-16
+      20          20                   12.318
+      21          21             -3.58188e-16
+      22          22             -1.03444e-06
+      23          23              3.55228e-17
+      24          24              -0.00790251
+
+
+
+
+Finished: Exit code: 0

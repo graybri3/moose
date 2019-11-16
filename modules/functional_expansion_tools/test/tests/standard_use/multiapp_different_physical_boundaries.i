@@ -66,9 +66,10 @@
   [./FX_Basis_Value_Main]
     type = FunctionSeries
     series_type = Cartesian
-    orders = '3'
+    orders = '5'
     physical_bounds = '1.0  9.0'
     x = Legendre
+    print_when_set=true
   [../]
 []
 

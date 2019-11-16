@@ -1,0 +1,321 @@
+Running command: /home/brittany/other/moose/modules/functional_expansion_tools/functional_expansion_tools-opt Outputs/csv=true -i peacock_run_exe_tmp_sphericalbc.i
+Working directory: /home/brittany/other/moose/modules/functional_expansion_tools/test/tests/standard_use
+
+
+MutableCoefficientsInterface: FX_Basis_Value_Main
+      Number of Coefficients: 25
+   0:            0       1:            0       2:            0       3:            0       4:            0       5:            0
+   6:            0       7:            0       8:            0       9:            0      10:            0      11:            0
+  12:            0      13:            0      14:            0      15:            0      16:            0      17:            0
+  18:            0      19:            0      20:            0      21:            0      22:            0      23:            0
+  24:            0
+
+
+
+
+
+*** Info ***
+Using FXVolumeUserObject 'FX_Value_UserObject_Main'.
+Note: it is your responsibility to ensure that the dimensionality, order, and series parameters for FunctionSeries 'FX_Basis_Value_Main' are sane.
+
+Framework Information:
+MOOSE Version:           git commit 1fe320752c on 2019-02-27
+LibMesh Version:         7c3f0dc000de7e31194af9033df3d2a1412e306d
+PETSc Version:           3.8.3
+Current Time:            Wed May 15 13:51:50 2019
+Executable Timestamp:    Mon Apr  1 08:53:42 2019
+
+Parallelism:
+  Num Processors:          1
+  Num Threads:             1
+
+Mesh:
+  Parallel Type:           replicated
+  Mesh Dimension:          3
+  Spatial Dimension:       3
+  Nodes:
+    Total:                 6147
+    Local:                 6147
+  Elems:
+    Total:                 5800
+    Local:                 5800
+  Num Subdomains:          1
+  Num Partitions:          1
+
+Nonlinear System:
+  Num DOFs:                6147
+  Num Local DOFs:          6147
+  Variables:               "m"
+  Finite Element Types:    "LAGRANGE"
+  Approximation Orders:    "FIRST"
+
+Execution Information:
+  Executioner:             Transient
+  TimeStepper:             ConstantDT
+  Solver Mode:             Preconditioned JFNK
+  Preconditioner:          hypre boomeramg strong_threshold: 0.7 (auto)
+
+
+Time Step 0, time = 0
+                dt = 0
+
+
+
+*** Warning ***
+/home/brittany/other/moose/modules/functional_expansion_tools/test/tests/standard_use/peacock_run_exe_tmp_sphericalbc.i:80: unused parameter 'Outputs/contains_complete_history'
+
+Time Step 1, time = 0.5
+                dt = 0.5
+ 0 Nonlinear |R| = 2.560765e+01
+      0 Linear |R| = 2.560765e+01
+      1 Linear |R| = 1.170661e+00
+      2 Linear |R| = 9.415820e-02
+      3 Linear |R| = 5.204436e-03
+      4 Linear |R| = 1.951573e-04
+ 1 Nonlinear |R| = 1.951749e-04
+      0 Linear |R| = 1.951749e-04
+      1 Linear |R| = 1.119498e-05
+      2 Linear |R| = 1.485527e-06
+      3 Linear |R| = 1.909835e-07
+      4 Linear |R| = 7.299349e-09
+      5 Linear |R| = 1.411533e-10
+ 2 Nonlinear |R| = 3.687745e-10
+ Solve Converged!
+
+MutableCoefficientsInterface: FX_Basis_Value_Main
+      Number of Coefficients: 25
+   0:      27.5307       1:  2.78192e-11       2: -3.64247e-11       3: -7.14803e-11       4: -5.79999e-12       5: -1.79201e-12
+   6:   6.0161e-07       7:  4.98519e-12       8: -6.01617e-07       9:  1.76771e-12      10:  6.84793e-13      11: -3.65906e-12
+  12:  4.79097e-12      13: -2.67443e-12      14: -4.51816e-13      15:   4.6397e-12      16: -9.12937e-17      17:  6.38891e-13
+  18:  1.14431e-11      19:  6.38891e-13      20:   -0.0424967      21:   9.5015e-15      22:  3.40854e-07      23:  1.92373e-13
+  24:  -0.00607116
+
+
+
+FunctionSeries: FX_Basis_Value_Main
+         Terms: 25
+---------------- Coefficients ----------------
+               == Subindices ==
+         Orders:   4
+ == Index  ==      x             === Value ===
+----------------------------------------------
+       0           0                  27.5307
+       1           1              2.78192e-11
+       2           2             -3.64247e-11
+       3           3             -7.14803e-11
+       4           4             -5.79999e-12
+       5           5             -1.79201e-12
+       6           6               6.0161e-07
+       7           7              4.98519e-12
+       8           8             -6.01617e-07
+       9           9              1.76771e-12
+      10          10              6.84793e-13
+      11          11             -3.65906e-12
+      12          12              4.79097e-12
+      13          13             -2.67443e-12
+      14          14             -4.51816e-13
+      15          15               4.6397e-12
+      16          16             -9.12937e-17
+      17          17              6.38891e-13
+      18          18              1.14431e-11
+      19          19              6.38891e-13
+      20          20               -0.0424967
+      21          21               9.5015e-15
+      22          22              3.40854e-07
+      23          23              1.92373e-13
+      24          24              -0.00607116
+
+
+
+Time Step 2, time = 1
+                dt = 0.5
+ 0 Nonlinear |R| = 6.757261e+02
+      0 Linear |R| = 6.757261e+02
+      1 Linear |R| = 3.557044e+00
+      2 Linear |R| = 3.053908e-01
+      3 Linear |R| = 3.917440e-02
+      4 Linear |R| = 1.837579e-03
+ 1 Nonlinear |R| = 1.842813e-03
+      0 Linear |R| = 1.842813e-03
+      1 Linear |R| = 1.314398e-04
+      2 Linear |R| = 1.377793e-05
+      3 Linear |R| = 2.107668e-06
+      4 Linear |R| = 4.565991e-08
+      5 Linear |R| = 1.165124e-09
+ 2 Nonlinear |R| = 1.157885e-08
+ Solve Converged!
+
+MutableCoefficientsInterface: FX_Basis_Value_Main
+      Number of Coefficients: 25
+   0:      142.851       1: -7.40202e-12       2: -1.52779e-10       3: -8.78519e-10       4: -2.68256e-11       5: -1.59381e-11
+   6:  0.000479833       7:  2.11745e-11       8: -2.73785e-06       9:  9.85178e-12      10: -6.39712e-13      11: -7.26376e-11
+  12:  2.97196e-11      13: -3.75943e-11      14: -4.10173e-12      15: -1.28768e-12      16:   9.6248e-14      17:  4.12564e-12
+  18:  5.00766e-11      19:  4.12564e-12      20:    -0.790813      21: -3.14628e-12      22:  1.24852e-06      23: -9.37848e-12
+  24:   -0.0395054
+
+
+
+FunctionSeries: FX_Basis_Value_Main
+         Terms: 25
+---------------- Coefficients ----------------
+               == Subindices ==
+         Orders:   4
+ == Index  ==      x             === Value ===
+----------------------------------------------
+       0           0                  142.851
+       1           1             -7.40202e-12
+       2           2             -1.52779e-10
+       3           3             -8.78519e-10
+       4           4             -2.68256e-11
+       5           5             -1.59381e-11
+       6           6              0.000479833
+       7           7              2.11745e-11
+       8           8             -2.73785e-06
+       9           9              9.85178e-12
+      10          10             -6.39712e-13
+      11          11             -7.26376e-11
+      12          12              2.97196e-11
+      13          13             -3.75943e-11
+      14          14             -4.10173e-12
+      15          15             -1.28768e-12
+      16          16               9.6248e-14
+      17          17              4.12564e-12
+      18          18              5.00766e-11
+      19          19              4.12564e-12
+      20          20                -0.790813
+      21          21             -3.14628e-12
+      22          22              1.24852e-06
+      23          23             -9.37848e-12
+      24          24               -0.0395054
+
+
+
+
+Time Step 3, time = 1.5
+                dt = 0.5
+ 0 Nonlinear |R| = 2.833964e+03
+      0 Linear |R| = 2.833964e+03
+      1 Linear |R| = 1.490843e+01
+      2 Linear |R| = 1.279751e+00
+      3 Linear |R| = 1.642269e-01
+      4 Linear |R| = 7.702647e-03
+ 1 Nonlinear |R| = 7.799757e-03
+      0 Linear |R| = 7.799757e-03
+      1 Linear |R| = 5.633166e-04
+      2 Linear |R| = 5.831680e-05
+      3 Linear |R| = 9.276847e-06
+      4 Linear |R| = 1.982343e-07
+      5 Linear |R| = 5.348199e-09
+ 2 Nonlinear |R| = 1.384127e-07
+ Solve Converged!
+
+MutableCoefficientsInterface: FX_Basis_Value_Main
+      Number of Coefficients: 25
+   0:       625.91       1: -2.11864e-10       2: -1.25155e-09       3:  -4.2118e-09       4: -2.65564e-10       5:  3.31642e-11
+   6:   0.00999765       7:  2.73115e-10       8: -1.14331e-05       9: -1.21746e-10      10: -1.89311e-11      11: -2.58302e-10
+  12: -3.26638e-10      13: -2.90293e-10      14:  2.70408e-11      15:  5.05417e-10      16:  6.02563e-14      17: -9.02515e-12
+  18:  6.11357e-10      19: -9.02515e-12      20:     -11.0164      21: -3.98684e-11      22:  4.72669e-06      23:  9.35197e-11
+  24:    -0.180472
+
+
+
+FunctionSeries: FX_Basis_Value_Main
+         Terms: 25
+---------------- Coefficients ----------------
+               == Subindices ==
+         Orders:   4
+ == Index  ==      x             === Value ===
+----------------------------------------------
+       0           0                   625.91
+       1           1             -2.11864e-10
+       2           2             -1.25155e-09
+       3           3              -4.2118e-09
+       4           4             -2.65564e-10
+       5           5              3.31642e-11
+       6           6               0.00999765
+       7           7              2.73115e-10
+       8           8             -1.14331e-05
+       9           9             -1.21746e-10
+      10          10             -1.89311e-11
+      11          11             -2.58302e-10
+      12          12             -3.26638e-10
+      13          13             -2.90293e-10
+      14          14              2.70408e-11
+      15          15              5.05417e-10
+      16          16              6.02563e-14
+      17          17             -9.02515e-12
+      18          18              6.11357e-10
+      19          19             -9.02515e-12
+      20          20                 -11.0164
+      21          21             -3.98684e-11
+      22          22              4.72669e-06
+      23          23              9.35197e-11
+      24          24                -0.180472
+
+
+
+Time Step 4, time = 2
+                dt = 0.5
+ 0 Nonlinear |R| = 1.192621e+04
+      0 Linear |R| = 1.192621e+04
+      1 Linear |R| = 6.255860e+01
+      2 Linear |R| = 5.367881e+00
+      3 Linear |R| = 6.896758e-01
+      4 Linear |R| = 3.233572e-02
+ 1 Nonlinear |R| = 3.590096e-02
+      0 Linear |R| = 3.590096e-02
+      1 Linear |R| = 2.720149e-03
+      2 Linear |R| = 2.618177e-04
+      3 Linear |R| = 4.671851e-05
+      4 Linear |R| = 9.138044e-07
+      5 Linear |R| = 2.584772e-08
+ 2 Nonlinear |R| = 1.138573e-06
+ Solve Converged!
+
+MutableCoefficientsInterface: FX_Basis_Value_Main
+      Number of Coefficients: 25
+   0:      2649.42       1: -4.11176e-09       2: -5.97521e-09       3: -2.04407e-08       4: -1.45029e-09       5: -8.99291e-10
+   6:     0.146628       7: -9.58587e-10       8:  -4.7684e-05       9:   3.6592e-10      10:  1.80286e-10      11:  5.07986e-10
+  12: -4.18091e-09      13: -1.28796e-09      14: -6.79379e-10      15:  2.00774e-09      16: -1.87978e-12      17:  4.77122e-10
+  18:  1.32294e-09      19:  4.77122e-10      20:     -142.019      21: -9.20031e-10      22:  1.90941e-05      23:  5.52635e-11
+  24:     -0.74731
+
+
+
+FunctionSeries: FX_Basis_Value_Main
+         Terms: 25
+---------------- Coefficients ----------------
+               == Subindices ==
+         Orders:   4
+ == Index  ==      x             === Value ===
+----------------------------------------------
+       0           0                  2649.42
+       1           1             -4.11176e-09
+       2           2             -5.97521e-09
+       3           3             -2.04407e-08
+       4           4             -1.45029e-09
+       5           5             -8.99291e-10
+       6           6                 0.146628
+       7           7             -9.58587e-10
+       8           8              -4.7684e-05
+       9           9               3.6592e-10
+      10          10              1.80286e-10
+      11          11              5.07986e-10
+      12          12             -4.18091e-09
+      13          13             -1.28796e-09
+      14          14             -6.79379e-10
+      15          15              2.00774e-09
+      16          16             -1.87978e-12
+      17          17              4.77122e-10
+      18          18              1.32294e-09
+      19          19              4.77122e-10
+      20          20                 -142.019
+      21          21             -9.20031e-10
+      22          22              1.90941e-05
+      23          23              5.52635e-11
+      24          24                 -0.74731
+
+
+
+
+Finished: Exit code: 0
